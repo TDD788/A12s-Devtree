@@ -100,7 +100,7 @@ jobs:
       uses: rokibhasansagar/slimhub_actions@main
 
     - name: Cleanup disk space
-       run: |
+      run: |
        sudo rm -rf /usr/share/dotnet
        sudo rm -rf /usr/local/lib/android
        sudo rm -rf /opt/ghc
@@ -305,7 +305,7 @@ jobs:
       uses: rokibhasansagar/slimhub_actions@main
 
     - name: Cleanup disk space
-       run: |
+      run: |
        sudo rm -rf /usr/share/dotnet
        sudo rm -rf /usr/local/lib/android
        sudo rm -rf /opt/ghc
@@ -458,7 +458,7 @@ jobs:
       uses: rokibhasansagar/slimhub_actions@main
 
     - name: Cleanup disk space
-       run: |
+      run: |
        sudo rm -rf /usr/share/dotnet
        sudo rm -rf /usr/local/lib/android
        sudo rm -rf /opt/ghc
@@ -614,7 +614,7 @@ jobs:
       uses: rokibhasansagar/slimhub_actions@main
 
     - name: Cleanup disk space
-       run: |
+      run: |
        sudo rm -rf /usr/share/dotnet
        sudo rm -rf /usr/local/lib/android
        sudo rm -rf /opt/ghc
