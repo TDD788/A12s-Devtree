@@ -99,10 +99,17 @@ jobs:
     - name: Clean-up
       uses: rokibhasansagar/slimhub_actions@main
 
+    - name: Cleanup disk space
+       run: |
+       sudo rm -rf /usr/share/dotnet
+       sudo rm -rf /usr/local/lib/android
+       sudo rm -rf /opt/ghc
+       image prune -a -f
+
     - name: Swap Space
       uses: pierotofy/set-swap-space@master
       with:
-        swap-size-gb: 16
+        swap-size-gb: 8
        
     - name: Build Environment
       run: |
@@ -297,6 +304,13 @@ jobs:
     - name: Cleanup
       uses: rokibhasansagar/slimhub_actions@main
 
+    - name: Cleanup disk space
+       run: |
+       sudo rm -rf /usr/share/dotnet
+       sudo rm -rf /usr/local/lib/android
+       sudo rm -rf /opt/ghc
+       image prune -a -f
+
     - name: Prepare the environment
       run: |
         sudo apt update
@@ -339,7 +353,7 @@ jobs:
     - name: Set Swap Space
       uses: pierotofy/set-swap-space@master
       with:
-        swap-size-gb: 32
+        swap-size-gb: 8
 
     - name: Building recovery
       run: |
@@ -443,6 +457,13 @@ jobs:
     - name: Cleanup
       uses: rokibhasansagar/slimhub_actions@main
 
+    - name: Cleanup disk space
+       run: |
+       sudo rm -rf /usr/share/dotnet
+       sudo rm -rf /usr/local/lib/android
+       sudo rm -rf /opt/ghc
+       image prune -a -f
+
     - name: Prepare the environment
       run: |
         sudo apt update
@@ -485,7 +506,7 @@ jobs:
     - name: Set Swap Space
       uses: pierotofy/set-swap-space@master
       with:
-        swap-size-gb: 50
+        swap-size-gb: 8
 
     - name: Building recovery
       run: |
@@ -592,6 +613,13 @@ jobs:
     - name: Cleanup
       uses: rokibhasansagar/slimhub_actions@main
 
+    - name: Cleanup disk space
+       run: |
+       sudo rm -rf /usr/share/dotnet
+       sudo rm -rf /usr/local/lib/android
+       sudo rm -rf /opt/ghc
+       image prune -a -f
+
     - name: Prepare the environment
       run: |
         sudo apt update
@@ -634,7 +662,7 @@ jobs:
     - name: Set Swap Space
       uses: pierotofy/set-swap-space@master
       with:
-        swap-size-gb: 12
+        swap-size-gb: 8
 
     - name: Building recovery
       run: |
