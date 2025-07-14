@@ -66,25 +66,42 @@ jobs:
   Dispatch-Builds:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      build_ofrp: ${{ steps.set-flags.outputs.build_ofrp }}
+      build_twrp: ${{ steps.set-flags.outputs.build_twrp }}
+      build_shrp: ${{ steps.set-flags.outputs.build_shrp }}
+      build_pbrp: ${{ steps.set-flags.outputs.build_pbrp }}
     steps:
-    - name: Generate matrix from input
-      id: set-matrix
-      run: |
-        echo "Input: ${{ github.event.inputs.BUILD_RECOVERY }}"
-        IFS=',' read -ra types <<< "${{ github.event.inputs.BUILD_RECOVERY }}"
-        json="["
-        for t in "${types[@]}"; do
-          t=$(echo "$t" | xargs) # Trim
-          json="$json\"$t\","
-        done
-        json="${json%,}]"
-        echo "matrix=$json" >> $GITHUB_OUTPUT
+      - name: Parse BUILD_RECOVERY input
+        id: set-flags
+        run: |
+          input="${{ github.event.inputs.BUILD_RECOVERY }}"
+          input=$(echo "$input" | tr '[:lower:]' '[:upper:]')
+
+          build_ofrp=false
+          build_twrp=false
+          build_shrp=false
+          build_pbrp=false
+
+          IFS=',' read -ra recs <<< "$input"
+          for r in "${recs[@]}"; do
+            r=$(echo "$r" | xargs)
+            case "$r" in
+              OFRP) build_ofrp=true ;;
+              TWRP) build_twrp=true ;;
+              SHRP) build_shrp=true ;;
+              PBRP) build_pbrp=true ;;
+            esac
+          done
+
+          echo "build_ofrp=$build_ofrp" >> $GITHUB_OUTPUT
+          echo "build_twrp=$build_twrp" >> $GITHUB_OUTPUT
+          echo "build_shrp=$build_shrp" >> $GITHUB_OUTPUT
+          echo "build_pbrp=$build_pbrp" >> $GITHUB_OUTPUT
 
   Build-OrangeFox:
     name: Build OFRP by ${{ github.actor }}
     runs-on: ubuntu-latest
-    if: contains(fromJson(needs.Dispatch-Builds.outputs.matrix), 'OFRP')
+    if: needs.Dispatch-Builds.outputs.build_ofrp == 'true'
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CCACHE_BASEDIR: "${{ github.workspace }}"
@@ -291,7 +308,7 @@ jobs:
   Build-TWRP:
     name: Build TWRP by ${{ github.actor }}
     runs-on: ubuntu-latest
-    if: contains(fromJson(needs.Dispatch-Builds.outputs.matrix), 'TWRP')
+    if: needs.Dispatch-Builds.outputs.build_twrp == 'true'
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CCACHE_BASEDIR: "${{ github.workspace }}"
@@ -443,7 +460,7 @@ jobs:
 
   Build-PBRP:
     name: Build PBRP by ${{ github.actor }}
-    if: contains(fromJson(needs.Dispatch-Builds.outputs.matrix), 'PBRP')
+    if: needs.Dispatch-Builds.outputs.build_pbrp == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -600,7 +617,7 @@ jobs:
 
   Build-SHRP:
     name: Build SHRP by ${{ github.actor }}
-    if: contains(fromJson(needs.Dispatch-Builds.outputs.matrix), 'SHRP')
+    if: needs.Dispatch-Builds.outputs.build_shrp == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
