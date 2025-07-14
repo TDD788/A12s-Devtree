@@ -84,7 +84,7 @@ jobs:
   Build-OrangeFox:
     name: Build OFRP by ${{ github.actor }}
     runs-on: ubuntu-latest
-    if: contains(fromJson(needs.Dispatch-Builds.outputs.recovery_matrix), 'OFRP')
+    if: contains(fromJson(needs.Dispatch-Builds.outputs.matrix), 'OFRP')
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CCACHE_BASEDIR: "${{ github.workspace }}"
@@ -291,7 +291,7 @@ jobs:
   Build-TWRP:
     name: Build TWRP by ${{ github.actor }}
     runs-on: ubuntu-latest
-    if: contains(fromJson(needs.Dispatch-Builds.outputs.recovery_matrix), 'TWRP')
+    if: contains(fromJson(needs.Dispatch-Builds.outputs.matrix), 'TWRP')
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CCACHE_BASEDIR: "${{ github.workspace }}"
@@ -443,7 +443,7 @@ jobs:
 
   Build-PBRP:
     name: Build PBRP by ${{ github.actor }}
-    if: contains(fromJson(needs.Dispatch-Builds.outputs.recovery_matrix), 'PBRP')
+    if: contains(fromJson(needs.Dispatch-Builds.outputs.matrix), 'PBRP')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -600,7 +600,7 @@ jobs:
 
   Build-SHRP:
     name: Build SHRP by ${{ github.actor }}
-    if: contains(fromJson(needs.Dispatch-Builds.outputs.recovery_matrix), 'SHRP')
+    if: contains(fromJson(needs.Dispatch-Builds.outputs.matrix), 'SHRP')
     runs-on: ubuntu-latest
     permissions:
       contents: write
