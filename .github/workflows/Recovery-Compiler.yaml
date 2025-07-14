@@ -71,14 +71,13 @@ jobs:
       - name: Generate matrix from input
         id: set-matrix
         run: |
-          IFS=',' read -ra types <<< "${{ github.event.inputs.BUILD_RECOVERY }}"
+          IFS=',' read -ra types <<< "OFRP,TWRP,PBRP,SHRP"
           if [ ${#types[@]} -eq 0 ]; then
             echo 'matrix={"include": []}' >> $GITHUB_OUTPUT
           else
-            matrix_json=$(jq -n --arg types "${types[*]}" '
-              $types | split(" ") | map({type: .}) | {include: .}
-            ')
-            echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
+            printf -v items '"%s",' "${types[@]}"
+            items="${items%,}"  # Elimina la coma final
+            echo "matrix={\"include\": [${items}]}" >> $GITHUB_OUTPUT
           fi
 
   Build-OrangeFox:
