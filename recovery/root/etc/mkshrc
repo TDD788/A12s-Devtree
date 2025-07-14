@@ -1,0 +1,2 @@
+#!/bin/sh
+source /system/etc/bash.bashrc

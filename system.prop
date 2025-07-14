@@ -1,0 +1,25 @@
+# Platform information
+ro.display.series=Samsung Galaxy A12 Nacho
+ro.product.manufacturer=samsung
+
+# Encryption settings
+ro.crypto.volume.filenames_mode=aes-256-cts
+fbe.metadata.wrappedkey=true
+
+# Gatekeeper settings
+vendor.gatekeeper.disable_spu=true
+
+# USB OTG
+persist.sys.isUsbOtgEnabled=false
+
+# FUSE passthrough
+persist.sys.fuse.passthrough.enable=true
+
+# Dynamic Partitions
+ro.boot.dynamic_partitions=true
+
+# Charger suspend
+ro.charger.enable_suspend=1
+
+# ADB settings
+ro.adb.secure=0

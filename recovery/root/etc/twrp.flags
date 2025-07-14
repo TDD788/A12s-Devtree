@@ -1,0 +1,21 @@
+#<mnt_point>	<type>	<src>	<mnt_flags	and	options>
+
+#	Physical	Partitions.
+/boot	emmc	/dev/block/by-name/boot	flags=display="Boot";backup=1;flashimg=1
+/recovery	emmc	/dev/block/by-name/recovery	flags=display="Recovery";backup=1;flashimg=1
+/metadata	ext4	/dev/block/by-name/metadata	flags=display="Metadata";wipeingui=1
+/data	f2fs	/dev/block/by-name/userdata	flags=fileencryption=aes-256-xts:aes-256-cts:v2+inlinecrypt_optimized+wrappedkey_v0,metadata_encryption=aes-256-xts:wrappedkey_v0,keydirectory=/metadata/vold/metadata_encryption,fscompress,noatime,nosuid,nodev,discard,usrquota,grpquota,fsync_mode=nobarrier,reserve_root=32768,resgid=5678,wait,check,quota,length=-20480
+/efs	ext4	/dev/block/by-name/efs	flags=backup;display="EFS";wipeingui;flashimg=1
+/sec_efs	ext4	/dev/block/by-name/sec_efs	flags=backup;display="Sec EFS";wipeingui=1;flashimg=1
+/dtbo	emmc	/dev/block/by-name/dtbo	flags=display="DTBO Image";flashimg=1;backup=1
+/dtb	emmc	/dev/block/by-name/dtb	flags=display="DTB Image";flashimg=1;backup=1
+/prism_image	emmc	/dev/block/by-name/optics	flags=display="Prism Image";backup=1;flashimg=1
+/optics_image	emmc	/dev/block/by-name/prism	flags=display="Optics Image";backup=1;flashimg=1
+/up_param	emmc	/dev/block/by-name/param	flags=display="Boot Logos";backup=1;flashimg=1
+
+
+#	Removable	devices.
+/external_sd	auto	/dev/block/mmcblk1p1	/dev/block/mmcblk1	flags=display="Micro SD Card";wipeingui=1
+/external_sd1	auto	/dev/block/mmcblk1p2	/dev/block/mmcblk2	flags=display="2nd Micro SD";wipeingui=1
+/usb_otg	auto	/dev/block/sda	flags=display="USB OTG 1st";wipeingui=1
+/usb_otg1	auto	/dev/block/sda1	flags=display="USB OTG 2nd";wipeingui=1

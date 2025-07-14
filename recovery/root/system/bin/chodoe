@@ -1,0 +1,150 @@
+#!/bin/sh
+###########################################
+# Last Updated : 2024, September 07
+###########################################
+#
+print() {
+  echo "$1"
+}
+
+# Directorio base para las imágenes si no se especifican como argumento
+DEFAULT_PATH="/sdcard"
+CUSTOM_PATH=""
+SYSTEM_IMG=""
+PRODUCT_IMG=""
+VENDOR_IMG=""
+SYSTEM_EXT_IMG=""
+
+# Comprobación de argumentos pasados al script
+while getopts "s:p:v:e:d:" opt; do
+  case "$opt" in
+    s) SYSTEM_IMG="$OPTARG" ;;
+    p) PRODUCT_IMG="$OPTARG" ;;
+    v) VENDOR_IMG="$OPTARG" ;;
+    e) SYSTEM_EXT_IMG="$OPTARG" ;;
+    d) CUSTOM_PATH="$OPTARG" ;;
+    *) print "Usage: $0 [-s system.img] [-p product.img] [-v vendor.img] [-e system_ext.img] [-d directory]"
+       exit 1 ;;
+  esac
+done
+
+# Si no se pasó un directorio personalizado, usar el predeterminado (/sdcard)
+if [ -z "$CUSTOM_PATH" ]; then
+  CUSTOM_PATH="$DEFAULT_PATH"
+fi
+
+# Si no se pasaron los argumentos de imagen, usar el directorio y los nombres predeterminados
+if [ -z "$SYSTEM_IMG" ]; then
+  SYSTEM_IMG="$CUSTOM_PATH/system.img"
+fi
+if [ -z "$PRODUCT_IMG" ]; then
+  PRODUCT_IMG="$CUSTOM_PATH/product.img"
+fi
+if [ -z "$VENDOR_IMG" ]; then
+  VENDOR_IMG="$CUSTOM_PATH/vendor.img"
+fi
+if [ -z "$SYSTEM_EXT_IMG" ]; then
+  SYSTEM_EXT_IMG="$CUSTOM_PATH/system_ext.img"
+fi
+
+print "ENVIRONMENT SETUP"
+
+# Unmount partitions if already mounted
+print "| Unmounting System"
+umount /system 2>/dev/null
+umount /system_root 2>/dev/null
+umount /system_ext 2>/dev/null
+umount /product 2>/dev/null
+umount /vendor 2>/dev/null
+
+active_slot=$(getprop ro.boot.slot_suffix)
+dynamic=$(getprop ro.boot.dynamic_partitions)
+
+print "| Detecting Partition Layout"
+
+if [ "$dynamic" = "true" ]; then
+  print "| Dynamic partition detected"
+
+  if [ ! -z "$active_slot" ]; then
+    system_block=$(ls -l /dev/block/mapper | grep system | grep -o '/dev/block/dm[^ ]*')$active_slot
+    product_block=$(ls -l /dev/block/mapper | grep product | grep -o '/dev/block/dm[^ ]*')$active_slot
+    vendor_block=$(ls -l /dev/block/mapper | grep vendor | grep -o '/dev/block/dm[^ ]*')$active_slot
+    system_ext_block=$(ls -l /dev/block/mapper | grep system_ext | grep -o '/dev/block/dm[^ ]*')$active_slot
+  else
+    system_block=$(ls -l /dev/block/mapper | grep system | grep -o '/dev/block/dm[^ ]*')
+    product_block=$(ls -l /dev/block/mapper | grep product | grep -o '/dev/block/dm[^ ]*')
+    vendor_block=$(ls -l /dev/block/mapper | grep vendor | grep -o '/dev/block/dm[^ ]*')
+    system_ext_block=$(ls -l /dev/block/mapper | grep system_ext | grep -o '/dev/block/dm[^ ]*')
+  fi
+
+  print "| System Block: $system_block"
+  blockdev --setrw $system_block
+
+  [ ! -z "$product_block" ] && print "| Product Block: $product_block" && blockdev --setrw $product_block
+  [ ! -z "$vendor_block" ] && print "| Vendor Block: $vendor_block" && blockdev --setrw $vendor_block
+  [ ! -z "$system_ext_block" ] && print "| System_Ext Block: $system_ext_block" && blockdev --setrw $system_ext_block
+
+else
+  if [ ! -z "$active_slot" ]; then
+    system_block=$(cat /etc/recovery.fstab | grep -o '/dev/[^ ]*system' | cut -f -1 | head -1)$active_slot
+    product_block=$(cat /etc/recovery.fstab | grep -o '/dev/[^ ]*product' | cut -f -1 | head -1)$active_slot
+    vendor_block=$(cat /etc/recovery.fstab | grep -o '/dev/[^ ]*vendor' | cut -f -1 | head -1)$active_slot
+  else
+    system_block=$(cat /etc/recovery.fstab | grep -o '/dev/[^ ]*system' | cut -f -1 | head -1)
+    product_block=$(cat /etc/recovery.fstab | grep -o '/dev/[^ ]*product' | cut -f -1 | head -1)
+    vendor_block=$(cat /etc/recovery.fstab | grep -o '/dev/[^ ]*vendor' | cut -f -1 | head -1)
+  fi
+
+  print "| System Block: $system_block"
+  [ ! -z "$product_block" ] && print "| Product Block: $product_block"
+  [ ! -z "$vendor_block" ] && print "| Vendor Block: $vendor_block"
+fi
+
+sleep 0.5
+
+# Flash system images to the partitions
+flash_partition() {
+  local img=$1
+  local block=$2
+  if [ -e "$img" ]; then
+    if simg2img "$img" "$block"; then
+      print "| $(basename "$img") flashed as sparse image"
+    else
+      dd if="$img" of="$block" bs=4096
+      print "| $(basename "$img") flashed as raw image"
+    fi
+    print "| Attempt to Resize Partition"
+    blockdev --setrw "$block"
+    e2fsck -fy "$block"
+    resize2fs "$block"
+    print "| Done"
+  else
+    print "| Can't find $(basename "$img")"
+  fi
+}
+
+# Flash all the partitions
+print "FLASHING SYSTEM IMAGE"
+flash_partition "$SYSTEM_IMG" "$system_block"
+
+if [ ! -z "$product_block" ]; then
+  print " "
+  print "FLASHING PRODUCT IMAGE"
+  flash_partition "$PRODUCT_IMG" "$product_block"
+fi
+
+if [ ! -z "$vendor_block" ]; then
+  print " "
+  print "FLASHING VENDOR IMAGE"
+  flash_partition "$VENDOR_IMG" "$vendor_block"
+fi
+
+if [ ! -z "$system_ext_block" ]; then
+  print " "
+  print "FLASHING SYSTEM_EXT IMAGE"
+  flash_partition "$SYSTEM_EXT_IMG" "$system_ext_block"
+fi
+
+sleep 1.0
+
+print "| Done"

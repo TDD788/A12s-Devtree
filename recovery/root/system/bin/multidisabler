@@ -1,0 +1,642 @@
+#!/bin/sh
+
+init() {
+      stty -echo
+      export ANDROID_ROOT="/mnt/system_mount"
+      OUTFD="$2"
+      ZIPFILE="$3"
+      DEBUG=false
+      ZIPNAME=${ZIPFILE##*/}
+      scr_wdth=$(echo "$(stty -a | grep columns | sed 's/;//g' | cut -d' ' -f7) - 1" | bc)
+      if readlink /proc/$$/fd/$OUTFD 2>$hider | grep /tmp >$hider; then
+      OUTFD=0
+      for FD in $(ls /proc/$$/fd); do
+        if readlink /proc/$$/fd/$FD 2>$hider | grep pipe >$hider; then
+          if ps | grep " 3 $FD " | grep -v grep >$hider; then
+            OUTFD=$FD
+            break
+          fi
+        fi
+      done
+    fi
+	
+}
+
+check_root_permissions() {
+    if [ "$(id -u)" -eq 0 ]; then
+        ROOT=true
+    else
+        ROOT=false
+    fi
+}
+
+exec_as_root() {
+	if [ "$ROOT" = "false" ]; then
+        if command -v sudo >/dev/null 2>&1; then
+            if "sudo" = true >/dev/null 2>&1; then
+                sudo "$0" "$@"
+                exit 1
+            fi
+	    elif command -v su >/dev/null 2>&1; then
+			if "su -c" = true >/dev/null 2>&1; then
+	  		  su -c sh "$0" "$@"
+	  		  exit 1
+			else
+				true
+ 	 		  /system/bin/sh "$0" "$@"
+ 	 		  exit 1
+			fi
+		else
+		    /system/bin/sh "$0" "$@"
+		    exit 1
+		fi
+	fi
+}
+
+progresive_print() {
+   echo "$@"
+}
+
+debug_print() {
+  [ "$DEBUG" = true ] && progresive_print "$*" 
+}
+
+print_full_bar() {
+  local bar_length="$scr_wdth"
+  local bar_content="$(printf '%*s' "$bar_length" | tr ' ' '=')"
+  progresive_print "$bar_content" 
+}
+
+print_justified() {
+  local str="$1"
+  local str_len="${#str}"
+  local padding_len=$(( ($scr_wdth - $str_len - 2) / 2))
+  local ljust="$(printf '%*s' "$padding_len")"
+  local rjust="$(printf '%*s' "$((padding_len + $str_len % 2))")"
+  local justified_str="=$ljust$str$rjust="
+  
+  progresive_print "$justified_str" 
+}
+
+md5() {
+  md5sum -b "$1" | cut -d ' ' -f 1
+}
+
+file_changed() {
+  local file="$1"
+  local old_md5="$2"
+  local new_md5=$( md5 "$file" )
+
+  if [ $new_md5 != $old_md5 ]; then
+    debug_print " -     ...modified."
+  else
+    debug_print " -     ...unchanged."
+  fi
+}
+
+patch_prop() {
+  local md5
+  md5=$( md5 $1 )
+  progresive_print " -   Patching $2 to $3."
+  if ! grep -q "^$2=" $1; then
+    echo -ne "\n$2=$3\n" >> $1;
+  else
+    local line=$(grep -n -m1 "^$2=" $1 | cut -d: -f1);
+    sed -i "${line}s;.*;${2}=${3};" $1;
+  fi;
+  file_changed $1 $md5
+}
+
+rm_from_manifest() {
+  local service="$1"
+  local md5
+  local i
+  local path_extra=''
+
+  if [ "$major" -gt 9 ]; then
+    path_extra='\.hardware'
+  fi
+
+  for i in /mnt/vendor_mount/etc/vintf/manifest.xml \
+	   /mnt/system_mount/system/etc/vintf/compatibility_matrix.device.xml \
+	   /mnt/vendor_mount/etc/vintf/manifest/vaultkeeper_manifest.xml; do
+    if [ -f "$i" ]; then
+      progresive_print " -   Found $i."
+      md5=$(md5 "$i")
+      sed -i -e "/<hal format=\"hidl\">/{N;/<name>vendor\.samsung${path_extra}\.security\.$service<\/name>/{:loop;N;/<\/hal>/!bloop;d}}" "$i"
+      file_changed "$i" "$md5"
+    fi
+  done
+}
+
+resize_vendor() {
+  local dm_block=$(df -k | cat | grep "/vendor" | cut -d' ' -f1)
+  local filesystem=$(file -sL "$dm_block" | grep -o '[A-Z0-9]* filesystem' | awk '{print tolower($1)}')
+  progresive_print " - Unmounting /vendor..."
+  umount /mnt/vendor_mount
+  progresive_print " - Checking vendor block partition before resizing..."
+  e2fsck -fp $dm_block
+  progresive_print " - Resizing the filesystem on $dm_block..."
+  resize2fs $dm_block
+  progresive_print " - Make the partition R/W by unsharing its blocks..."
+  e2fsck -E unshare_blocks $dm_block
+  progresive_print " - Remounting /vendor..."
+  search_and_mount_partition "vendor" "vendor_mount"
+  mount --bind -t "$filesystem" "$partition" "/mnt/$mount_folder" 2>$hider
+  mount -o rw,noatime "$partition" "/mnt/$mount_folder" 2>$hider
+}
+
+vendor_free_size_check() {
+  progresive_print " - Checking vendor free size..."
+  if dd if=/dev/zero of=/mnt/vendor_mount/test bs=1 count=1 2>$hider; then
+    progresive_print " -     ...succeeded."
+    rm -f /mnt/vendor_mount/test
+  else
+    progresive_print " -     ...No free space left on vendor, attempting to resize vendor..."
+    echo
+    rm -f /mnt/vendor_mount/test
+    resize_vendor
+  fi
+}
+
+disable_fbe() {
+  local md5
+  local i
+  fstab_files=`grep -lr 'fileencryption' /mnt/vendor_mount/etc`
+
+  # Exynos devices = fstab.exynos*.
+  # MediaTek devices = fstab.mt*.
+  # Snapdragon devices = fstab.qcom, fstab.emmc, fstab.default
+  #
+  for i in $fstab_files; do
+    if [ -f $i ]; then
+      progresive_print " - Disabling file-based encryption (FBE) for /data..."
+      progresive_print " -   Found $i."
+      md5=$( md5 $i )
+      # This comments out the offending line and adds an edited one.
+      sed -i -e 's/^\([^#].*\)fileencryption*\(.*\)$/# &\n\1encryptable\2/g' $i
+      file_changed $i $md5
+    fi
+  done
+}
+
+disable_fde() {
+  local md5
+  local i
+  fstab_files=`grep -lr 'forceencrypt' /mnt/vendor_mount/etc`
+
+  #
+  # Exynos devices = fstab.exynos*.
+  # MediaTek devices = fstab.mt*.
+  # Snapdragon devices = fstab.qcom, fstab.emmc, fstab.default
+  #
+  for i in $fstab_files; do
+    if [ -f $i ]; then
+      progresive_print " - Disabling full-disk encryption (FDE) for /data..."
+      progresive_print " -   Found $i."
+      md5=$( md5 $i )
+      # This comments out the offending line and adds an edited one.
+      sed -i -e 's/^\([^#].*\)forceencrypt=[^,]*\(.*\)$/# &\n\1encryptable\2/g' $i
+      file_changed $i $md5
+    fi
+  done
+}
+
+disable_vaultkeeper() {
+  local md5
+  local i
+
+  progresive_print " - Disabling vaultkeeperd..."
+
+  if [ "$major" -gt 9 ]; then
+    for i in /mnt/system_mount/system/etc/init/vk*.rc /mnt/vendor_mount/etc/init/vk*.rc /mnt/vendor_mount/etc/init/vaultkeeper*; do
+      if [ -f "$i" ]; then
+        progresive_print " -   Found $i."
+        md5=$(md5 "$i")
+        sed -i -e 's/^[^#].*$/# &/' "$i"
+        file_changed "$i" "$md5"
+      fi
+    done
+  else
+    sed -i -e 's/^[^#].*vaultkeeper.*$/# &/' \
+           -e '/\/system\/bin\/vaultkeeperd/,/^#?$/s/^[^#]*$/#&/' "/mnt/system_mount"/init.rc
+  fi
+
+  rm_from_manifest vaultkeeper
+
+  for i in /mnt/system_mount/system /mnt/vendor_mount; do
+    if [ -f "$i"/bin/vaultkeeperd ]; then
+      progresive_print " -   Found $i/bin/vaultkeeperd. Disabling..."
+      chmod 0 "$i"/bin/vaultkeeperd
+    fi
+  done
+}
+
+disable_wsm() {
+  progresive_print " - Disabling wsm..."
+  rm_from_manifest wsm "/mnt/vendor_mount/etc/vintf/manifest.xml /mnt/vendor_mount/etc/vintf/manifest/wsm_manifest.xml"
+}
+
+disable_cass() {
+  local md5
+  local i
+
+  # The T860 needs this. Otherwise, the log will fill with messages like this:
+  #
+  # 10-20 03:23:20.501 27757 27757 E CASS: Failed to connect(4)
+  # 10-20 03:23:20.501 27757 27757 E CASS: Failed to connect ril daemon(2). Retry cnt(6)
+  # The F907B on Android 10 also needs it:
+  #
+  # 04-05 22:21:23.519  3599  3599 E CASS_DEBUG: VaultKeeper is not ready. try again.
+  # 04-05 22:21:23.519  3599  3599 I CASS_DEBUG: Disconnect ril daemon
+  # 04-05 22:21:23.519  3599  3599 I CASS_DEBUG: Failed to connect ril daemon(1). Retry cnt(2)
+  #
+  # As of OneUI 2.5, other devices need it, too; even Exynos.
+  #
+  progresive_print " - Disabling cass..."
+
+  for i in /mnt/system_mount/init.rc /mnt/vendor_mount/init/cass.rc /mnt/vendor_mount/etc/init/cass.rc; do
+    if [ -f $i ]; then
+      progresive_print " -   Found $i. Disabling..."
+      md5=$( md5 $i )
+      sed -i -e 's/^[^#].*cass.*$/# &/' -re '/\/(system|vendor)\/bin\/cass/,/^#?$/s/^[^#]*$/#&/' $i
+      file_changed $i $md5
+    fi
+  done
+  patch_prop /mnt/vendor_mount/build.prop ro.security.cass.feature 0
+}
+
+disable_proca() {
+  local md5
+  local i
+
+  progresive_print " - Disabling process authentication..."
+
+  # G97[035]F = pa_daemon.rc on Android 9; pa_daemon_teegris.rc on Android 10.
+  # G977B, N97[05]F, A105F, A505F = pa_daemon_teegris.rc
+  # T510 + T515 = pa_daemon_kinibi.rc
+  # T860 + T865 = pa_daemon_qsee.rc
+  #
+  for i in /mnt/vendor_mount/etc/init/pa_daemon*.rc; do
+    if [ -f $i ]; then
+      progresive_print " -   Found $i. Disabling..."
+      md5=$( md5 $i )
+      sed -i -e 's/^[^#]/# &/' $i
+      file_changed $i $md5
+    fi
+  done
+
+  rm_from_manifest proca "/mnt/vendor_mount/etc/vintf/manifest.xml"
+}
+
+disable_recovery_patching() {
+  echo
+  progresive_print "Disabling recovery restoration..."
+  echo
+  
+  dd if=/dev/block/by-name/boot of=/tmp/old-boot.img
+  mkdir -p /tmp/unpacked_boot
+  cd /tmp/unpacked_boot
+  magiskboot unpack -h /tmp/old-boot.img
+  magiskboot repack /tmp/old-boot.img /tmp/new-boot.img
+  cd -
+  rm -rf /tmp/unpacked_boot
+  dd if=/tmp/new-boot.img of=/dev/block/by-name/boot
+}
+
+disable_cass() {
+  local md5
+  local i
+
+  progresive_print " - Disabling cass..."
+
+  for i in "/mnt/system_mount"/init.rc /mnt/vendor_mount/init/cass.rc /mnt/vendor_mount/etc/init/cass.rc; do
+    if [ -f "$i" ]; then
+      progresive_print " -   Found $i. Disabling..."
+      md5=$(md5 "$i")
+      sed -i -e 's/^[^#].*cass.*$/# &/' \
+             -e '/\/(system|vendor)\/bin\/cass/,/^#?$/s/^[^#]*$/#&/' "$i"
+      file_changed "$i" "$md5"
+    fi
+  done
+}
+
+disable_proca() {
+  local md5
+  local i
+
+  progresive_print " - Disabling process authentication..."
+
+  for i in /mnt/vendor_mount/etc/init/pa_daemon*.rc; do
+    if [ -f "$i" ]; then
+      progresive_print " -   Found $i. Disabling..."
+      sed -i -e 's/^[^#]/# &/' "$i"
+      file_changed "$i" "$md5"
+    fi
+  done
+
+  rm_from_manifest proca
+}
+
+disable_wsm() {
+  progresive_print " - Disabling wsm..."
+  rm_from_manifest wsm
+}
+
+disable_recovery_restoration() {
+  local r=recovery-from-boot.p
+  local found=false
+  local i
+
+  progresive_print " - Disabling restoration of stock recovery..."
+
+  for i in "/mnt/system_mount" "/mnt/system_mount"/system /mnt/vendor_mount; do
+    if [ -f "$(find "$i" -maxdepth 1 -type f -name "*$r*")" 2>$hider ]; then
+      progresive_print " -   Found recovery file in $i. Disabling..."
+      rm -rf "$(find "$i" -maxdepth 1 -type f -name "*$r*")" 2>$hider
+      progresive_print " -     ...succeeded."
+      rm -rf /mnt/vendor_mount/etc/init/vendor_flash_recovery.rc 2>$hider
+      rm -rf /mnt/vendor_mount/bin/install-recovery.sh 2>$hider
+      found=true
+      break
+    else
+      progresive_print " -   No stock recovery patcher found in $i."
+    fi
+  done
+}
+
+fix_smart_view() {
+  progresive_print " - Fixing Smart View..."
+  patch_prop /mnt/system_mount/system/build.prop wlan.wfd.hdcp disable
+  patch_prop /mnt/system_mount/system/build.prop wifi.interface wlan0
+}
+
+disable_frp() {
+  progresive_print " - Disabling Factory Reset Protection (FRP)..."
+  patch_prop /mnt/vendor_mount/build.prop ro.frp.pst
+}
+
+disable_avb() {
+  local md5
+  if [ -f /mnt/vendor_mount/etc/fstab.default ]; then
+    progresive_print " - Disabling Android Verified Boot (AVB)..."
+    progresive_print " -   Found /mnt/vendor_mount/etc/fstab.default."
+    md5=$( md5 /mnt/vendor_mount/etc/fstab.default )
+    sed -i -e 's/\,avb\_keys\=\/avb\/q\-gsi\.avbpubkey\:\/avb\/r\-gsi\.avbpubkey\:\/avb\/s\-gsi\.avbpubkey//g' -e 's/\,avb\=vbmeta//g' \
+           -e 's/\,avb//g' /mnt/vendor_mount/etc/fstab.default
+    file_changed /mnt/vendor_mount/etc/fstab.default $md5
+  fi
+}
+
+disable_tlc() {
+  local md5
+  local i
+
+  progresive_print " - Removing TLC HDM/ICCC/KG..."
+  for i in "snap" "ddar" "hdm" "iccc"; do
+    rm_from_manifest $i "/mnt/vendor_mount/etc/vintf/manifest/vendor.samsung.hardware.tlc.$i*.xml"
+  done
+  for i in "blockchain" "ucm" "payment"; do
+    rm_from_manifest $i "/mnt/vendor_mount/etc/vintf/manifest.xml"
+  done
+
+  for i in /mnt/vendor_mount/etc/init/vendor.samsung.hardware.tlc.*.rc; do
+    if [ -f $i ]; then
+      progresive_print " -   Found $i."
+      md5=$( md5 $i )
+      sed -i -e 's/^[^#].*$/# &/' $i
+      file_changed $i $md5
+    fi
+  done
+  patch_prop /system_root/system/build.prop ro.config.iccc_version iccc_disabled
+}
+
+patch_libbluetooth() {
+  if [ "$major" -ne 10 ]; then
+    return
+  fi
+
+  local f="/mnt/system_mount"/system/lib64/libbluetooth.so
+  local tf=/tmp/f
+
+  progresive_print " - Bluetooth fix requested via renamed zip."
+  progresive_print " - Attempting to patch $f..."
+  progresive_print "     This may take a while."
+
+  if echo "$device" | grep -E '[GN]9[67][03567][UW0]|F90(0[FN]|7[BN])|T86[05]' >$hider; then
+    substitute='s/88000054691180522925c81a69000037e0030032/04000014691180522925c81a69000037e0031f2a/'
+  else
+    substitute='s/c8000034f4031f2af3031f2ae8030032/1f2003d5f4031f2af3031f2ae8031f2a/'
+  fi
+
+  xxd -p "$f" | tr -d '\n ' | sed -e "$substitute" | xxd -rp > "$tf"
+
+  if ! cmp "$tf" "$f" >$hider && [ "$(stat -c '%s' "$tf")" -eq "$(stat -c '%s' "$f")" ]; then
+    progresive_print " -   Patching succeeded."
+    touch -r "$f" "$tf"
+    chmod 644 "$tf"
+    mv "$tf" "$f"
+  else
+    progresive_print " -   Patching failed. No change made."
+    rm -f "$tf"
+  fi
+}
+search_and_mount_partition() {
+    mount_point="$1"
+    mount_folder="$2"
+    paths="/dev/block /dev/block/by-name /dev/block/mapper"
+    partition=""
+    for path in $paths; do
+        partition=$(find "$path" -type l -name "$mount_point" -exec readlink -f {} + | head -n 1)
+        if [ -n "$partition" ]; then
+            break
+        fi
+    done
+    filesystem=$(file -sL "$partition" | grep -o '[A-Z0-9]* filesystem' | awk '{print tolower($1)}')
+    if [ -n "$partition" ]; then
+        mkdir -p "/mnt/$mount_folder" 2>$hider
+        if [ command -v toybox 2>$hider ]; then
+        	mount --bind -t "$filesystem" "$partition" "/mnt/$mount_folder"
+            mount -o rw,noatime "$partition" "/mnt/$mount_folder"
+        fi
+        if [ $? -eq 0 ]; then
+            fatal_mount=false
+        else
+            fatal_mount=true
+        fi
+    else
+        fatal_mount=true
+    fi
+}
+
+generate_random_message() {
+  hour=$(echo "$(date +%Hhs:%Mmin)")
+  date=$(echo "$(date +%dday/%mmon/%Yyear)")
+  date=$(echo "$date" | sed 's/\//|/g')
+  day="$(echo "[$hour]($date)")"
+  
+}
+
+MAIN() {
+  check_root_permissions
+  exec_as_root
+  print_full_bar
+  print_justified "Multi-disabler v4.0 for Samsung devices"
+  print_justified "running Android 9 or later"
+  print_justified "by TheDarkDeath788"
+  print_justified "Thanks to:"
+  print_justified "Simon1511"
+  print_justified "Corsicanu"
+  print_justified "Afaneh92"
+  print_justified "Ian Macdonald"
+  print_justified ""
+  print_justified "For a lot of useful code"
+  print_full_bar
+  echo
+  
+  os=$(getprop ro.build.version.release)
+  major="${os%%.*}"
+  bl=$(getprop ro.boot.bootloader)
+  dp=$(getprop ro.boot.dynamic_partitions)
+  fw="${bl:$((${#bl} - 4)):4}"
+  device="${bl:0:$((${#bl} - 8))}"
+  mtf=$(getprop ro.product.manufacturer)
+
+  if [ "$mtf" != "samsung" ]; then
+    progresive_print " - Device appears not to be made by Samsung."
+    progresive_print " - Your manufacturer is $mtf."
+    fatal=true
+  elif [ -z "$device" ]; then
+    progresive_print " - Could not determine device model."
+    progresive_print " - Your device model is $device."
+    fatal=true
+  elif [ "$major" -lt 9 ]; then
+    progresive_print " - This software is incompatible with Android $major."
+    progresive_print " - Your software version is $major."
+    fatal=true
+  fi
+
+  if [ "$fatal" = true ]; then
+    progresive_print " - Installation aborted."
+    echo
+    exit 1
+  fi
+
+  progresive_print " - Detected a $device device with a $fw bootloader."
+  progresive_print " - The environment appears to be Android $major."
+  echo
+  progresive_print " - Mounting /system..."
+  
+  ANDROID_ROOT=/mnt/system_mount
+  search_and_mount_partition "system" "system_mount" 2>$hider
+  mount --bind -t "$filesystem" "$partition" "/mnt/$mount_folder" 2>$hider
+
+  if ! mount | grep "/mnt/system_mount >> $hider"; then
+    ANDROID_ROOT=/mnt/$mount_folder
+    progresive_print " - Attempt failed. Mounting at $ANDROID_ROOT..."
+    mount -o rw,noatime "$partition" "/mnt/$mount_folder" 2>$hider
+    mount --bind -t "$filesystem" "$partition" "/mnt/$mount_folder" 2>$hider
+    if ! mount | grep "$ANDROID_ROOT" >> $hider; then
+      progresive_print " -   Even that attempt failed. Aborting..."
+      ARGUMENT=null
+    fi
+  fi
+
+  progresive_print " - Mounting /vendor..." 2>$hider
+  search_and_mount_partition "vendor" "vendor_mount" 2>$hider
+  mount --bind -t "$filesystem" "$partition" "/mnt/$mount_folder" 2>$hider
+  mount -o rw,noatime "$partition" "/mnt/$mount_folder" 2>$hider
+    
+  if ! mount | grep /vendor >> $hider; then
+      progresive_print " -   Mount failed. Aborting..."
+      exit 3
+  fi
+
+  vendor_free_size_check
+  disable_fbe
+  disable_fde
+  disable_recovery_restoration
+
+  if [ "$@" = '-all' ]; then
+    disable_recovery_patching
+    disable_vaultkeeper
+    disable_proca
+    fix_smart_view
+    disable_frp
+    disable_avb
+    disable_tlc
+
+    if [ "$major" -gt 9 ]; then
+      disable_wsm
+      disable_cass
+    fi
+  else
+    progresive_print ""
+    progresive_print " - Some features remain enabled."
+    progresive_print ""
+  fi
+
+  [ "$ZIPNAME" != "${ZIPNAME/_btfix/}" ] && [ "$major" -gt 9 ] && patch_libbluetooth
+  
+  progresive_print " - Unmounting /vendor..."
+  umount /mnt/vendor_mount
+  progresive_print " - Unmounting /system_root..."
+  umount /mnt/system_mount
+  
+  if [ "$FORMAT" = "true" ]; then
+      progresive_print "Formatting device so that it starts soon does not turn off the device)."
+      mkfs.f2fs /dev/block/by-name/userdata
+  else
+      progresive_print "If you want to finish the process you must format manually or previously define FORMAT=true."
+  fi
+  
+  echo
+  progresive_print " - Finished."
+  echo
+}
+
+function DEBUGER() {
+    check_root_permissions
+    exec_as_root "$@"
+    
+    LOG_FILE="/cache/multidisabler-$day.log"
+    DEBUG_LOG="/cache/debug_log_$day.log"
+    
+    if [ "$DEBUG" = "true" ]; then
+		hider=/dev/null
+    else
+        hider=/dev/null
+    fi
+    
+    init
+  
+    if [ "$DEBUG" = "true" ]; then
+      echo "DEBUG Mode Is Enabled"
+      rm -rf /cache/multidisabler-*.log
+      rm -rf /cache/debug_log_*.log
+    
+      echo "Script started at $day" >> "$LOG_FILE"
+      echo "Arguments passed: $@" >> "$LOG_FILE"
+    
+      set -x > "$DEBUG_LOG" 2>&1
+    
+      debug_command() {
+        local cmd="$1"
+        echo "Executing command: $cmd" >> "$LOG_FILE"
+        eval "$cmd" 2>&1 | tee -a "$LOG_FILE"
+        echo "Command finished: $cmd" >> "$LOG_FILE"
+      }
+
+      debug_command "MAIN $@"
+    
+      set +x > /dev/tty 2>&1
+      cat "$DEBUG_LOG" >> "$LOG_FILE"
+      rm "$DEBUG_LOG"
+    
+      echo "Script finished at $(date)" >> "$LOG_FILE"
+    else
+      MAIN "$@"
+    fi
+}
+
+DEBUGER "$@"

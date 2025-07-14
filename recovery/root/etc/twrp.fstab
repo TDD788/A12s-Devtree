@@ -1,0 +1,17 @@
+#<mnt_point>	<type>	<src>	<mnt_flags	and	options>
+#	System	as	root	and	mountable	logical	partitions.
+/system	emmc	/dev/block/mapper/system	flags=logical=1
+/vendor	emmc	/dev/block/mapper/vendor	flags=logical=1
+/product	emmc	/dev/block/mapper/product	flags=logical=1
+/odm	emmc	/dev/block/mapper/odm	flags=logical=1
+
+/system	auto	/dev/block/mapper/system	flags=wipeingui=1
+/vendor	ext4	/dev/block/mapper/vendor	flags=wipeingui=1
+/product	ext4	/dev/block/mapper/product	flags=wipeingui=1
+/odm	ext4	/dev/block/mapper/odm	flags=wipeingui=1
+
+#	Unmountable	Logical	Partitions.
+/system	emmc	/dev/block/mapper/system	flags=flashimg=1;display="System";backup=1
+/vendor	emmc	/dev/block/mapper/vendor	flags=flashimg=1;display="Vendor";backup=1
+/product	emmc	/dev/block/mapper/product	flags=flashimg=1;display="Product";backup=1
+/odm	emmc	/dev/block/mapper/odm	flags=flashimg=1;display="Odm";backup=1

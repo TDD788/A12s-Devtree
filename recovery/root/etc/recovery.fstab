@@ -1,0 +1,21 @@
+#<src>	<mnt_point>	<type>	<mnt_flags	and	options>	<fs_mgr_flags>
+/system        ext4    /dev/block/mapper/system        flags=wipeingui=1,display="System"
+/vendor        ext4    /dev/block/mapper/vendor        flags=wipeingui=1,display="Vendor"
+/product       ext4    /dev/block/mapper/product       flags=wipeingui=1,display="Product"
+/odm   ext4    /dev/block/mapper/odm   flags=wipeingui=1,display="Odm"
+
+/system        emmc    /dev/block/mapper/system        flags=flashimg=1,display="System"
+/vendor        emmc    /dev/block/mapper/vendor        flags=flashimg=1,display="Vendor"
+/product       emmc    /dev/block/mapper/product       flags=flashimg=1,display="Product"
+/odm   emmc    /dev/block/mapper/odm   flags=flashimg=1,display="Odm"
+
+system	/system	ext4	ro,barrier=1,discard	wait	flags=wipeingui=1,flashimg=1
+system	/system_root	ro,barrier=1,discard	wait	flags=wipeingui=1,flashimg=1
+vendor	/vendor	ext4	ro,barrier=1,discard	wait	flags=wipeingui=1,flashimg=1
+product	/product	ext4	ro,barrier=1,discard	wait	flags=wipeingui=1,flashimg=1
+odm	/odm	ext4	ro,barrier=1,discard	wait	flags=wipeingui=1,flashimg=1
+
+/dev/block/by-name/metadata	/metadata	ext4	rw,noatime,nosuid,nodev,discard	wait,formattable,wrappedkey
+/dev/block/by-name/userdata	/data	f2fs	rw,noatime,nodev,discard,usrquota,grpquota,fsync_mode=nobarrier,reserve_root=32768,resgid=5678,inlinecrypt	wait,check,quota,fileencryption=aes-256-xts:aes-256-cts:v2,length=-20480,keydirectory=/metadata/vold/metadata_encryption
+/dev/block/by-name/misc	/misc	emmc	defaults	recoveryonly	defaults
+/dev/block/by-name/cache	/cache	ext4	noatime	wait,check

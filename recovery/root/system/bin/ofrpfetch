@@ -1,0 +1,34 @@
+#!/bin/sh
+
+DEVICE=$(getprop ro.product.system.device)
+
+barrier() {
+    echo
+    echo "================================"
+}
+
+printinfo() {
+    barrier
+    echo " "
+    echo $(grep /system/etc/logo)
+    echo " "
+    echo "OFRP FOR GALAXY $DEVICE - By : TheDarkDeath788"
+    barrier
+    echo "Bootloader: $(getprop ro.boot.bootloader)"
+    echo "Brand: $(getprop ro.product.manufacturer)"
+    echo "Device: $(getprop ro.product.name)"
+    echo "Model: $(getprop ro.product.model)"
+    echo "Hardware: $(getprop ro.hardware)"
+    echo "Treble Compatibility: $(getprop ro.boot.dynamic_partitions)"
+    echo "Platform: $(getprop ro.board.platform)"
+    echo "CPU API: $(getprop ro.system.product.cpu.abilist)"
+    echo "Dynamic: $(getprop ro.boot.dynamic_partitions)"
+    echo "Android: $(getprop ro.build.version.release) , SDK: $(getprop ro.build.version.sdk)"
+    echo "ID: $(getprop ro.build.id)"
+	echo "Kernel: $(uname -r)"
+    echo""
+    echo "END OF ORANGEFETCH"
+    barrier
+}
+
+printinfo

@@ -1,0 +1,37 @@
+#!/bin/sh
+case $1 in
+    --recovery | -r)
+        pkill recovery && recovery
+        ;;
+    --download | -d)
+        reboot download
+        ;;
+    --fastbootd | -f)
+        reboot fastboot
+        ;;
+    --bootloader | -b)
+        reboot bootloader
+        ;;
+    --system | -s)
+        reboot system
+        ;;
+    *)
+        echo "SAMBOOT"
+        echo "The alternative Booting Option for the ported recoveries, powered by TWRP-based Recoveries"
+        echo "Like OrangeFox"
+        echo " "
+        echo "=============================================="
+        echo " "
+        echo "Usage: "
+        echo "# samboot [--recovery / -r|--download / -d|--system / -s|--fastbootd / -f|--bootloader / -b] "
+        echo " "
+        echo "--recovery    /  -r      Boot again to recovery"
+        echo "--download    /  -d      Boot to Download Mode"
+        echo "--system      /  -s      Boot to System"
+        echo "--fastbootd   /  -f      Boot to Fastbootd"
+        echo "--bootloader  /  -b      Boot to Bootloader/Stock Fastboot"
+        echo ""
+        echo "Made By TheDarkDeath788 with Like and Appreciation for You"
+        echo ""
+        ;;
+esac
