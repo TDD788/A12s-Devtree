@@ -434,6 +434,8 @@ jobs:
         elif [[ "${{ github.event.inputs.MANIFEST }}" == "11.0" ]]; then
           echo "MANIFEST=android-11.0" >> $GITHUB_ENV
         fi
+      env:
+        INPUT_MANIFEST: ${{ github.event.inputs.MANIFEST }}
         
     - name: Check Out
       uses: actions/checkout@v3
@@ -467,7 +469,7 @@ jobs:
         echo "workspace-folder=$(pwd)" >> $GITHUB_OUTPUT
         git config --global user.name "TDD788"
         git config --global user.email "thedarkdeath788@gmail.com"
-        repo init --depth=1 -u https://github.com/PitchBlackRecoveryProject/manifest_pb -b android-${{ github.event.inputs.MANIFEST }}
+        repo init --depth=1 -u https://github.com/PitchBlackRecoveryProject/manifest_pb -b $MANIFEST
       id: pwd
           
     - name: Repo Sync
