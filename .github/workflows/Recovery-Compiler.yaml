@@ -66,14 +66,20 @@ jobs:
   Dispatch-Builds:
     runs-on: ubuntu-latest
     outputs:
-      recovery_matrix: ${{ steps.set-matrix.outputs.matrix }}
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-    - name: Set recovery matrix
+    - name: Generate matrix from input
       id: set-matrix
       run: |
-        IFS=',' read -ra REC <<< "${{ github.event.inputs.BUILD_RECOVERY }}"
-        MATRIX=$(printf '"%s",' "${REC[@]}")
-        echo "matrix=[${MATRIX%,}]" >> $GITHUB_OUTPUT
+        echo "Input: ${{ github.event.inputs.BUILD_RECOVERY }}"
+        IFS=',' read -ra types <<< "${{ github.event.inputs.BUILD_RECOVERY }}"
+        json="["
+        for t in "${types[@]}"; do
+          t=$(echo "$t" | xargs) # Trim
+          json="$json\"$t\","
+        done
+        json="${json%,}]"
+        echo "matrix=$json" >> $GITHUB_OUTPUT
 
   Build-OrangeFox:
     name: Build OFRP by ${{ github.actor }}
