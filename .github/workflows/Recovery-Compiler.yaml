@@ -10,15 +10,9 @@ on:
   workflow_dispatch:
     inputs:
       BUILD_RECOVERY:
-        description: 'Recovery Type'
+        description: 'Recovery Type (comma separated)'
         required: true
-        default: 'OFRP'
-        type: choice
-        options:
-          - 'OFRP'
-          - 'SHRP'
-          - 'TWRP'
-          - 'PBRP'
+        default: 'OFRP,TWRP,PBRP,SHRP'
       MANIFEST:
         description: 'Manifest Branch'
         required: true
@@ -67,18 +61,30 @@ on:
         required: true
         default: true
         type: boolean
-       
+
 jobs:
+  Dispatch-Builds:
+    runs-on: ubuntu-latest
+    outputs:
+      recovery_matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+    - name: Set recovery matrix
+      id: set-matrix
+      run: |
+        IFS=',' read -ra REC <<< "${{ github.event.inputs.BUILD_RECOVERY }}"
+        MATRIX=$(printf '"%s",' "${REC[@]}")
+        echo "matrix=[${MATRIX%,}]" >> $GITHUB_OUTPUT
+
   Build-OrangeFox:
     name: Build OFRP by ${{ github.actor }}
     runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.BUILD_RECOVERY == 'OFRP' }}
+    if: contains(fromJson(needs.Dispatch-Builds.outputs.recovery_matrix), 'OFRP')
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CCACHE_BASEDIR: "${{ github.workspace }}"
     permissions:
       contents: write
-    steps: 
+    steps:
     - name: Set env based on input
       id: set-manifest
       run: |
@@ -89,13 +95,13 @@ jobs:
         elif [[ "${{ github.event.inputs.MANIFEST }}" == "11.0" ]]; then
           echo "MANIFEST=fox-14.1" >> $GITHUB_ENV
         fi
-        
+
     - name: Checkout
       uses: actions/checkout@v4
       with:
         submodules: "recursive"
         fetch-depth: 0
-              
+
     - name: Clean-up
       uses: rokibhasansagar/slimhub_actions@main
 
@@ -109,7 +115,7 @@ jobs:
       uses: pierotofy/set-swap-space@master
       with:
         swap-size-gb: 8
-       
+
     - name: Build Environment
       run: |
        sudo apt-get update
@@ -138,7 +144,7 @@ jobs:
        sudo bash setup/android_build_env.sh
        sed -i 's/cd -/cd ../g' setup/install_android_sdk.sh
        sudo bash setup/install_android_sdk.sh
-      
+
     - name: Set-up Manifest
       if: github.event.inputs.MANIFEST == '11.0' || github.event.inputs.MANIFEST == '12.1' || github.event.inputs.MANIFEST == '14.1'
       run: |
@@ -149,7 +155,7 @@ jobs:
         git clone https://gitlab.com/OrangeFox/sync.git -b master
         cd sync
         ./orangefox_sync.sh --branch ${{ github.event.inputs.MANIFEST }} --path ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST }}
-        
+
     - name: Sync Kernel Source
       if: ${{ github.event.inputs.KERNEL }}
       run: |
@@ -166,7 +172,7 @@ jobs:
         git clone ${{ github.event.inputs.DEVICE_TREE }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./${{ github.event.inputs.DEVICE_PATH }}
         cd ${{ github.event.inputs.DEVICE_PATH }}
         echo "COMMIT_ID=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        
+
     - name: Building OrangeFox
       run: |
         cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST }}
@@ -178,7 +184,7 @@ jobs:
         export CCACHE_dir=${GITHUB_WORKSPACE}
         set -e
         lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng && make clean && mka adbd ${{ inputs.BUILD_TARGET }}image -j$(nproc --all)
-    
+
     - name: Upload files
       if: ${{ github.event.inputs.RELEASE_TYPE == 'false' }}
       uses: actions/upload-artifact@v4
@@ -186,7 +192,7 @@ jobs:
        name: Orange Fox Recovery for ${{ github.event.inputs.DEVICE_NAME }} ${{ env.BUILD_DATE }} Image
        path: |
         OrangeFox/fox_${{ github.event.inputs.MANIFEST }}/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/OrangeFox*.img
-        
+
     - name: Upload files
       if: ${{ github.event.inputs.RELEASE_TYPE == 'false' }}
       uses: actions/upload-artifact@v4
@@ -194,7 +200,7 @@ jobs:
        name: Orange Fox Recovery for ${{ github.event.inputs.DEVICE_NAME }} ${{ env.BUILD_DATE }} Zip
        path: |
         OrangeFox/fox_${{ github.event.inputs.MANIFEST }}/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/OrangeFox*.zip
-        
+
     - name: Upload files
       if: ${{ github.event.inputs.RELEASE_TYPE == 'false' }}
       uses: actions/upload-artifact@v4
@@ -202,7 +208,7 @@ jobs:
        name: Orange Fox Recovery for ${{ github.event.inputs.DEVICE_NAME }} ${{ env.BUILD_DATE }} Tar
        path: |
         OrangeFox/fox_${{ github.event.inputs.MANIFEST }}/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/OrangeFox*.tar
-        
+
     - name: Set Release Properties
       run: |
         echo "BUILD_DATE=$(TZ=Asia/Manila date +%Y%m%d)" >> $GITHUB_ENV
@@ -213,7 +219,7 @@ jobs:
         echo "MD5_ZIP=$(md5sum out/target/product/${{ github.event.inputs.DEVICE_NAME }}/OrangeFox*.zip | cut -d ' ' -f 1)" >> $GITHUB_ENV
         echo "MD5_TAR=$(md5sum out/target/product/${{ github.event.inputs.DEVICE_NAME }}/OrangeFox*.tar | cut -d ' ' -f 1)" >> $GITHUB_ENV
         echo "MD5_RIMG=$(md5sum out/target/product/${{ github.event.inputs.DEVICE_NAME }}/recovery.img | cut -d ' ' -f 1)" >> $GITHUB_ENV
-     
+
     - name: Upload to Release
       if: ${{ github.event.inputs.RELEASE_TYPE == 'true' }}
       uses: softprops/action-gh-release@v1
@@ -279,7 +285,7 @@ jobs:
   Build-TWRP:
     name: Build TWRP by ${{ github.actor }}
     runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.BUILD_RECOVERY == 'TWRP' }}
+    if: contains(fromJson(needs.Dispatch-Builds.outputs.recovery_matrix), 'TWRP')
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CCACHE_BASEDIR: "${{ github.workspace }}"
@@ -296,10 +302,10 @@ jobs:
         elif [[ "${{ github.event.inputs.MANIFEST }}" == "11.0" ]]; then
           echo "MANIFEST=twrp-11.0" >> $GITHUB_ENV
         fi
-        
+
     - name: Check Out
       uses: actions/checkout@v3
-    
+
     - name: Cleanup
       uses: rokibhasansagar/slimhub_actions@main
 
@@ -327,7 +333,7 @@ jobs:
         curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
         chmod a+x ~/bin/repo
         sudo ln -sf ~/bin/repo /usr/bin/repo
-      
+
     - name: Initialize repo
       run: |
         mkdir workspace
@@ -337,12 +343,12 @@ jobs:
         git config --global user.email "thedarkdeath788@gmail.com"
         repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp -b twrp-${{ github.event.inputs.MANIFEST }}
       id: pwd
-          
+
     - name: Repo Sync
       run: |
         repo sync -j$(nproc --all) --force-sync
       working-directory: workspace
-      
+
     - name: Clone device tree
       run: |
         git clone ${{ github.event.inputs.DEVICE_TREE }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./${{ github.event.inputs.DEVICE_PATH }}
@@ -378,7 +384,7 @@ jobs:
         echo "MD5_IMG=$(md5sum workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/recovery.img | cut -d ' ' -f 1)" >> $GITHUB_ENV
         echo "MD5_RAMDISK=$(md5sum workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/ramdisk-recovery.img | cut -d ' ' -f 1)" >> $GITHUB_ENV
         echo "MD5_RRAMDISK=$(md5sum workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/ramdisk.img | cut -d ' ' -f 1)" >> $GITHUB_ENV
-        
+
     - name: Upload to Release
       if: ${{ github.event.inputs.RELEASE_TYPE == 'true' }}
       uses: softprops/action-gh-release@v1
@@ -428,10 +434,10 @@ jobs:
         <b>Download:</b> <a href=\"https://github.com/${{ github.repository }}/releases/tag/twrp${{ env.GITHUB_RUN_ID }}\">Download Here</a>"
 
         curl -s -X POST https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage -d chat_id=${TELEGRAM_CHAT_ID} -d parse_mode=HTML -d text="${MESSAGE}"
-        
+
   Build-PBRP:
     name: Build PBRP by ${{ github.actor }}
-    if: ${{ github.event.inputs.BUILD_RECOVERY == 'PBRP' }}
+    if: contains(fromJson(needs.Dispatch-Builds.outputs.recovery_matrix), 'PBRP')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -448,10 +454,10 @@ jobs:
         fi
       env:
         INPUT_MANIFEST: ${{ github.event.inputs.MANIFEST }}
-        
+
     - name: Check Out
       uses: actions/checkout@v3
-    
+
     - name: Cleanup
       uses: rokibhasansagar/slimhub_actions@main
 
@@ -479,7 +485,7 @@ jobs:
         curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
         chmod a+x ~/bin/repo
         sudo ln -sf ~/bin/repo /usr/bin/repo
-      
+
     - name: Initialize repo
       run: |
         mkdir workspace
@@ -489,12 +495,12 @@ jobs:
         git config --global user.email "thedarkdeath788@gmail.com"
         repo init --depth=1 -u https://github.com/PitchBlackRecoveryProject/manifest_pb -b $MANIFEST
       id: pwd
-          
+
     - name: Repo Sync
       run: |
         repo sync -j$(nproc --all) --force-sync
       working-directory: workspace
-      
+
     - name: Clone device tree
       run: |
         git clone ${{ github.event.inputs.DEVICE_TREE }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./${{ github.event.inputs.DEVICE_PATH }}
@@ -531,7 +537,7 @@ jobs:
         echo "MD5_RAMDISK=$(md5sum workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/ramdisk-recovery.img | cut -d ' ' -f 1)" >> $GITHUB_ENV
         echo "MD5_RRAMDISK=$(md5sum workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/ramdisk.img | cut -d ' ' -f 1)" >> $GITHUB_ENV
         echo "MD5_ZIP=$(md5sum workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/*.zip | cut -d ' ' -f 1)" >> $GITHUB_ENV
-        
+
     - name: Upload to Release
       if: ${{ github.event.inputs.RELEASE_TYPE == 'true' }}
       uses: softprops/action-gh-release@v1
@@ -588,7 +594,7 @@ jobs:
 
   Build-SHRP:
     name: Build SHRP by ${{ github.actor }}
-    if: ${{ github.event.inputs.BUILD_RECOVERY == 'SHRP' }}
+    if: contains(fromJson(needs.Dispatch-Builds.outputs.recovery_matrix), 'SHRP')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -596,8 +602,11 @@ jobs:
     - name: Set MANIFEST based on input
       id: set-manifest
       run: |
-        if [[ "${{ github.event.inputs.MANIFEST }}" == "12.1" ]]; then
+        if [[ "${{ github.event.inputs.MANIFEST }}" == "14.1" ]]; then
           echo "URL=https://github.com/SHRP-Reborn/manifest" >> $GITHUB_ENV
+          echo "MANIFEST=shrp-12.1" >> $GITHUB_ENV
+        elif [[ "${{ github.event.inputs.MANIFEST }}" == "12.1" ]]; then
+          echo "URL=https://github.com/SHRP/manifest" >> $GITHUB_ENV
           echo "MANIFEST=shrp-12.1" >> $GITHUB_ENV
         elif [[ "${{ github.event.inputs.MANIFEST }}" == "11.0" ]]; then
           echo "URL=https://github.com/SHRP/manifest" >> $GITHUB_ENV
@@ -606,7 +615,7 @@ jobs:
 
     - name: Check Out
       uses: actions/checkout@v3
-   
+
     - name: Cleanup
       uses: rokibhasansagar/slimhub_actions@main
 
@@ -634,7 +643,7 @@ jobs:
         curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
         chmod a+x ~/bin/repo
         sudo ln -sf ~/bin/repo /usr/bin/repo
-      
+
     - name: Initialize repo
       run: |
         mkdir workspace
@@ -644,12 +653,12 @@ jobs:
         git config --global user.name "TDD788"
         repo init --depth=1 -u ${{ env.URL }} -b ${{ env.MANIFEST }}
       id: pwd
-          
+
     - name: Repo Sync
       run: |
         repo sync -j$(nproc --all) --force-sync
       working-directory: workspace
-      
+
     - name: Clone device tree
       run: |
         git clone ${{ github.event.inputs.DEVICE_TREE }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./${{ github.event.inputs.DEVICE_PATH }}
@@ -668,8 +677,8 @@ jobs:
         export BOARD_RAMDISK_USE_LZMA=true
         set -e
         lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng && make clean && mka adbd ${{ inputs.BUILD_TARGET }}image -j$(nproc --all)
-      working-directory: ${{ steps.pwd.outputs.workspace-folder }}        
-      
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
     - name: Upload files
       if: ${{ github.event.inputs.RELEASE_TYPE == 'false' }}
       uses: actions/upload-artifact@v4
@@ -740,4 +749,4 @@ jobs:
         <b>Download:</b> <a href=\"https://github.com/${{ github.repository }}/releases/tag/shrp${{ env.GITHUB_RUN_ID }}\">Download Here</a>"
 
         curl -s -X POST https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage -d chat_id=${TELEGRAM_CHAT_ID} -d parse_mode=HTML -d text="${MESSAGE}"
-        
+
