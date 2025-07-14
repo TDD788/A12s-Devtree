@@ -68,22 +68,23 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-    - name: Generate matrix from input
-      id: set-matrix
-      run: |
-        IFS=',' read -ra types <<< "${{ github.event.inputs.BUILD_RECOVERY }}"
-        if [ ${#types[@]} -eq 0 ]; then
-          echo 'matrix=[]' >> $GITHUB_OUTPUT
-        else
-          json_array=$(printf '"%s",' "${types[@]}" | sed 's/,$//')
-          echo "matrix=[$json_array]" >> $GITHUB_OUTPUT
-        fi
-        echo "Generated matrix: $json_array"
+      - name: Generate matrix from input
+        id: set-matrix
+        run: |
+          IFS=',' read -ra types <<< "${{ github.event.inputs.BUILD_RECOVERY }}"
+          if [ ${#types[@]} -eq 0 ]; then
+            echo 'matrix={"include": []}' >> $GITHUB_OUTPUT
+          else
+            matrix_json=$(jq -n --arg types "${types[*]}" '
+              $types | split(" ") | map({type: .}) | {include: .}
+            ')
+            echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
+          fi
 
   Build-OrangeFox:
     name: Build OFRP by ${{ github.actor }}
     runs-on: ubuntu-latest
-    if: ${{ contains(toJSON(needs.Dispatch-Builds.outputs.matrix), 'OFRP') }}
+    if: ${{ contains(fromJSON(needs.Dispatch-Builds.outputs.matrix).include.*.type, 'OFRP') }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CCACHE_BASEDIR: "${{ github.workspace }}"
@@ -290,7 +291,7 @@ jobs:
   Build-TWRP:
     name: Build TWRP by ${{ github.actor }}
     runs-on: ubuntu-latest
-    if: ${{ contains(toJSON(needs.Dispatch-Builds.outputs.matrix), 'TWRP') }}
+    if: ${{ contains(fromJSON(needs.Dispatch-Builds.outputs.matrix).include.*.type, 'TWRP') }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CCACHE_BASEDIR: "${{ github.workspace }}"
@@ -442,7 +443,7 @@ jobs:
 
   Build-PBRP:
     name: Build PBRP by ${{ github.actor }}
-    if: ${{ contains(toJSON(needs.Dispatch-Builds.outputs.matrix), 'PBRP') }}
+    if: ${{ contains(fromJSON(needs.Dispatch-Builds.outputs.matrix).include.*.type, 'PBRP') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -599,7 +600,7 @@ jobs:
 
   Build-SHRP:
     name: Build SHRP by ${{ github.actor }}
-    if: ${{ contains(toJSON(needs.Dispatch-Builds.outputs.matrix), 'SHRP') }}
+    if: ${{ contains(fromJSON(needs.Dispatch-Builds.outputs.matrix).include.*.type, 'SHRP') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
