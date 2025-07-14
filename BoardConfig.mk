@@ -131,7 +131,7 @@ BOARD_BUILD_DISABLED_VBMETAIMAGE           := true
 # Crypto
 PLATFORM_SECURITY_PATCH   := 2099-12-31
 VENDOR_SECURITY_PATCH     := 2099-12-31
-PLATFORM_VERSION          := 14
+PLATFORM_VERSION          := $(shell tail -n1 cts/tests/tests/os/assets/platform_versions.txt)
 TW_INCLUDE_CRYPTO         := false
 TW_INCLUDE_CRYPTO_FBE     := false
 TW_INCLUDE_FBE_METADATA_DECRYPT := false
