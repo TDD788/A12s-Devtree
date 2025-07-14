@@ -25,6 +25,7 @@ on:
         default: '12.1'
         type: choice
         options:
+          - '14.1'
           - '12.1'
           - '11.0'
       DEVICE_TREE:
@@ -81,10 +82,12 @@ jobs:
     - name: Set env based on input
       id: set-manifest
       run: |
-        if [[ "${{ github.event.inputs.MANIFEST }}" == "12.1" ]]; then
+        if [[ "${{ github.event.inputs.MANIFEST }}" == "14.1" ]]; then
           echo "MANIFEST=fox-12.1" >> $GITHUB_ENV
-        elif [[ "${{ github.event.inputs.MANIFEST }}" == "11.0" ]]; then
+        elif [[ "${{ github.event.inputs.MANIFEST }}" == "12.1" ]]; then
           echo "MANIFEST=fox-11.0" >> $GITHUB_ENV
+        elif [[ "${{ github.event.inputs.MANIFEST }}" == "11.0" ]]; then
+          echo "MANIFEST=fox-14.1" >> $GITHUB_ENV
         fi
         
     - name: Checkout
@@ -131,7 +134,7 @@ jobs:
        sudo bash setup/install_android_sdk.sh
       
     - name: Set-up Manifest
-      if: github.event.inputs.MANIFEST == '11.0' || github.event.inputs.MANIFEST == '12.1'
+      if: github.event.inputs.MANIFEST == '11.0' || github.event.inputs.MANIFEST == '12.1' || github.event.inputs.MANIFEST == '14.1'
       run: |
         mkdir -p ${GITHUB_WORKSPACE}/OrangeFox
         cd ${GITHUB_WORKSPACE}/OrangeFox
@@ -280,7 +283,9 @@ jobs:
     - name: Set MANIFEST based on input
       id: set-manifest
       run: |
-        if [[ "${{ github.event.inputs.MANIFEST }}" == "12.1" ]]; then
+        if [[ "${{ github.event.inputs.MANIFEST }}" == "14.1" ]]; then
+          echo "MANIFEST=twrp-14.1" >> $GITHUB_ENV
+        elif [[ "${{ github.event.inputs.MANIFEST }}" == "12.1" ]]; then
           echo "MANIFEST=twrp-12.1" >> $GITHUB_ENV
         elif [[ "${{ github.event.inputs.MANIFEST }}" == "11.0" ]]; then
           echo "MANIFEST=twrp-11.0" >> $GITHUB_ENV
@@ -422,7 +427,9 @@ jobs:
     - name: Set MANIFEST based on input
       id: set-manifest
       run: |
-        if [[ "${{ github.event.inputs.MANIFEST }}" == "12.1" ]]; then
+        if [[ "${{ github.event.inputs.MANIFEST }}" == "14.1" ]]; then
+          echo "MANIFEST=android-14.0" >> $GITHUB_ENV
+        elif [[ "${{ github.event.inputs.MANIFEST }}" == "12.1" ]]; then
           echo "MANIFEST=android-12.1" >> $GITHUB_ENV
         elif [[ "${{ github.event.inputs.MANIFEST }}" == "11.0" ]]; then
           echo "MANIFEST=android-11.0" >> $GITHUB_ENV
