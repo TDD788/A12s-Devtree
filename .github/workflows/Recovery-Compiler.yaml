@@ -22,7 +22,7 @@ on:
       MANIFEST:
         description: 'Manifest Branch'
         required: true
-        default: '12.1'
+        default: '14.1'
         type: choice
         options:
           - '14.1'
@@ -104,7 +104,6 @@ jobs:
        sudo rm -rf /usr/share/dotnet
        sudo rm -rf /usr/local/lib/android
        sudo rm -rf /opt/ghc
-       image prune -a -f
 
     - name: Swap Space
       uses: pierotofy/set-swap-space@master
@@ -309,7 +308,6 @@ jobs:
        sudo rm -rf /usr/share/dotnet
        sudo rm -rf /usr/local/lib/android
        sudo rm -rf /opt/ghc
-       image prune -a -f
 
     - name: Prepare the environment
       run: |
@@ -462,7 +460,6 @@ jobs:
        sudo rm -rf /usr/share/dotnet
        sudo rm -rf /usr/local/lib/android
        sudo rm -rf /opt/ghc
-       image prune -a -f
 
     - name: Prepare the environment
       run: |
@@ -618,7 +615,6 @@ jobs:
        sudo rm -rf /usr/share/dotnet
        sudo rm -rf /usr/local/lib/android
        sudo rm -rf /opt/ghc
-       image prune -a -f
 
     - name: Prepare the environment
       run: |
