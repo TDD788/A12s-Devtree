@@ -106,7 +106,7 @@ jobs:
         cd ~/OrangeFox
         git clone https://gitlab.com/OrangeFox/sync.git -b master --depth=1
         cd sync
-        aria2c "https://github.com/TDD788/A12s-Devtree/raw/refs/heads/main/.github/orangefox_sync.sh"
+        aria2c --allow-overwrite=true --auto-file-renaming=false "https://github.com/TDD788/A12s-Devtree/raw/refs/heads/main/.github/orangefox_sync.sh"
         chmod +x orangefox_sync.sh
         ./orangefox_sync.sh --branch ${{ github.event.inputs.MANIFEST }} --path ~/OrangeFox/fox_${{ github.event.inputs.MANIFEST }}
         cd ~/OrangeFox/fox_${{ github.event.inputs.MANIFEST }}
