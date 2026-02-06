@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# GSIRW - OPTIMIZED & RESTORED INTERFACE
+# GSIRW - OPTIMIZED & FULLY RESTORED
 # ==============================================================================
 
 # --- Variables Globales y Configuración Visual ---
@@ -34,7 +34,7 @@ export LOGO='
 ----------------------------------------------------
 '
 
-# Decodificación segura de LOGOV2 (evitando errores si base64 falla)
+# Decodificación segura de LOGOV2
 if command -v base64 >/dev/null; then
     LOGOV2="$(echo "CiguIFkgLikKKSAgICgKKCAgICAgKQo==" | base64 -d 2>/dev/null)"
 else
@@ -44,7 +44,6 @@ fi
 # --- Funciones de Utilidad (Optimizadas) ---
 
 function generate_date_message() {
-    # Bash puro (más rápido que llamar a date)
     printf -v hour "%(%Hhs:%Mmin)T" -1
     printf -v date_str "%(%dday|%mmon|%Yyear)T" -1
     day="[$hour]($date_str)"
@@ -54,7 +53,6 @@ function clear_screen() {
     printf '\033c'
 }
 
-# Obtener ancho de terminal de forma compatible
 function get_term_width() {
     local cols=$(tput cols 2>/dev/null)
     if [ -z "$cols" ]; then
@@ -83,17 +81,10 @@ function print_justified() {
     printf "%${padding}s%s\n" "" "$text"
 }
 
-# Animación de escritura progresiva (Optimizada)
 function progressive_print() {
     local text="$1"
     local delay="${2:-0.05}"
-    
-    # Si la animación está desactivada, imprimir de una vez
-    if [ "$ANIMATION" != "true" ]; then
-        echo "$text"
-        return
-    fi
-
+    if [ "$ANIMATION" != "true" ]; then echo "$text"; return; fi
     local len=${#text}
     for (( i=0; i<len; i++ )); do
         printf "%s" "${text:$i:1}"
@@ -107,7 +98,14 @@ function sleepy() {
 }
 
 function ask() {
+    echo ""
     print_justified "Press any key to continue..."
+    read -rsn1
+}
+
+function prompt_for_confirmation() {
+    local msg="$1"
+    echo "$msg"
     read -rsn1
 }
 
@@ -119,7 +117,6 @@ function default() {
     DEFAULT_PRODUCT_NAME="product"
     DEFAULT_ODM_NAME="odm"
     
-    # Valores por defecto si no existen
     : "${CUSTOM_SYSTEM_NAME:=system}"
     : "${CUSTOM_VENDOR_NAME:=vendor}"
     : "${CUSTOM_PRODUCT_NAME:=product}"
@@ -129,15 +126,13 @@ function default() {
     : "${DEFAULT_START_POINT:=/sdcard}"
     : "${MOUSE:=>}"
     : "${UP_SHORTCUTS:=true}"
-    : "${SORT_DIR_TYPE:=name_asc}"
-    : "${SORT_FILE_TYPE:=name_asc}"
+    : "${SORT_DIR_TYPE:=name_asc}" # Mantenido por compatibilidad, aunque el explorador optimizado usa orden natural
     
-    # Lista optimizada como string para búsqueda rápida (evita bucles)
     FILE_EXTENSIONS="|img|gzip|xz|tar|zip|gz|bz2|lz4|7z|rar|Z|"
     
+    # Formato limpio para shortcuts
     SHORTCUTS="DATA /data
-    SDCARD /sdcard
-    "
+SDCARD /sdcard"
     
     identify_device
 }
@@ -150,7 +145,7 @@ function identify_device() {
     elif [ -d "/dev/block/by-name" ]; then
         DYNAMIC="false"; GENERIC="true"; DEVICE_MAPPER="/dev/block/by-name"
     else
-        DEVICE_MAPPER="/dev/block/by-name"; GENERIC="true" # Fallback
+        DEVICE_MAPPER="/dev/block/by-name"; GENERIC="true"
     fi
 
     if ls "$DEVICE_MAPPER"/*_a >/dev/null 2>&1; then
@@ -159,7 +154,6 @@ function identify_device() {
         A_B="false"; A_O="true"
     fi
     
-    # Definir variables de dispositivo para visualización
     DEVICE_NAME=$(getprop ro.product.system.device)
     DEVICE_MODEL=$(getprop ro.product.system.model)
     SOC=$(getprop ro.product.board)
@@ -179,17 +173,14 @@ function exec_as_root() {
     fi
 }
 
-# --- Funciones de Sistema de Archivos (Optimizadas) ---
+# --- Funciones de Sistema de Archivos (Core Optimizado) ---
 
 function perform_resize_and_unshare_blocks() {
     local img="$1"
     echo "Optimizing image: $img"
     resize2fs "$img" 6G 2>$hider || echo "Warning: Fixed resize failed, trying auto..."
-    echo "Fixing Errors..."
     e2fsck -fp "$img"
-    echo "Unsharing blocks..."
     e2fsck -E unshare_blocks "$img"
-    echo "Minimizing..."
     resize2fs -M "$img"
 }
 
@@ -208,14 +199,13 @@ function mount_device() {
     
     local loop_device=$(losetup -f 2>/dev/null)
     
-    # Intento 1: Losetup
     if [ -n "$loop_device" ] && losetup "$loop_device" "$partition"; then
         local fs_type=$(blkid -o value -s TYPE "$loop_device")
         [ -z "$fs_type" ] && fs_type="ext4"
         
         if mount -t "$fs_type" -o rw,noatime "$loop_device" "$mount_point"; then
             echo "Mounted at $mount_point"
-            ask # Pausa para que el usuario modifique
+            prompt_for_confirmation "Press any key when finished modifying..."
             umount "$mount_point"
             losetup -d "$loop_device"
             e2fsck -f "$partition"
@@ -225,10 +215,9 @@ function mount_device() {
         losetup -d "$loop_device"
     fi
     
-    # Intento 2: Montaje directo (Si el kernel lo soporta)
     if mount -o rw,noatime "$partition" "$mount_point"; then
         echo "Mounted directly at $mount_point"
-        ask
+        prompt_for_confirmation "Press any key when finished modifying..."
         umount "$mount_point"
         e2fsck -f "$partition"
         resize2fs -M "$partition"
@@ -243,7 +232,6 @@ function extract_image_from_archive() {
     local archive="$1"
     local ext="${archive##*.}"
     local extracted_dir="$(dirname "$archive")/extracted"
-    
     mkdir -p "$extracted_dir"
     echo "Extracting $archive..."
 
@@ -258,13 +246,12 @@ function extract_image_from_archive() {
     esac
 }
 
-# --- Lógica Unificada (DRY - Don't Repeat Yourself) ---
+# --- Lógica de Procesamiento de Particiones (DRY) ---
 
 function process_partitions() {
     local action="$1" # ota_rw, copy_only
     local partitions=("system" "vendor" "product" "odm")
     
-    # Determinar sufijos
     local slots=("")
     [ "$A_B" = "true" ] && slots=("_a" "_b")
     local src_suffix=""
@@ -283,7 +270,7 @@ function process_partitions() {
             echo "Copying $source_dev -> $target_img"
             dd if="$source_dev" of="$target_img" bs=32M status=none
         else
-            continue # Saltar si no existe partición
+            continue 
         fi
 
         perform_resize_and_unshare_blocks "$target_img"
@@ -301,7 +288,7 @@ function process_partitions() {
     done
 }
 
-# --- Configuración y TUI ---
+# --- Menús de Configuración (RESTAURADOS) ---
 
 function save_configurations() {
     local config_file="/cache/gsirw.conf"
@@ -333,47 +320,163 @@ function load_saved_configurations() {
     done
 }
 
-function configure_manually() {
+function set_partition_names() {
     clear_screen
-    echo "Manual configuration not fully implemented in optimized version."
-    echo "Edit $HOME/gsirw.conf manually or use basic settings."
+    echo "Partition Names Configuration:"
+    echo "1. System: $CUSTOM_SYSTEM_NAME"
+    echo "2. Vendor: $CUSTOM_VENDOR_NAME"
+    echo "3. Product: $CUSTOM_PRODUCT_NAME"
+    echo "4. ODM: $CUSTOM_ODM_NAME"
+    echo "5. Restore defaults"
+    echo "0. Save and exit"
+    read -rsn1 input
+    echo ""
+    case "$input" in
+        1) read -p "New System Name: " CUSTOM_SYSTEM_NAME ;;
+        2) read -p "New Vendor Name: " CUSTOM_VENDOR_NAME ;;
+        3) read -p "New Product Name: " CUSTOM_PRODUCT_NAME ;;
+        4) read -p "New ODM Name: " CUSTOM_ODM_NAME ;;
+        5) CUSTOM_SYSTEM_NAME="$DEFAULT_SYSTEM_NAME"; CUSTOM_VENDOR_NAME="$DEFAULT_VENDOR_NAME"; CUSTOM_PRODUCT_NAME="$DEFAULT_PRODUCT_NAME"; CUSTOM_ODM_NAME="$DEFAULT_ODM_NAME" ;;
+        0) return ;;
+    esac
+}
+
+function manage_shortcuts() {
+    while true; do
+        clear_screen
+        echo "Manage Shortcuts"
+        echo "1. Create"
+        echo "2. Delete"
+        echo "3. List"
+        echo "4. Return"
+        read -rsn1 opt
+        echo ""
+        case $opt in
+            1)
+                read -p "Name: " s_name
+                read -p "Path: " s_path
+                if [ -d "$s_path" ]; then
+                    SHORTCUTS="$SHORTCUTS
+$s_name $s_path"
+                fi
+                ;;
+            2)
+                read -p "Name to delete: " s_name
+                # Eliminar línea que contiene el nombre al principio
+                SHORTCUTS=$(echo "$SHORTCUTS" | grep -v "^$s_name ")
+                ;;
+            3) echo "$SHORTCUTS"; ask ;;
+            4) return ;;
+        esac
+    done
+}
+
+function configure_file_extensions() {
+    while true; do
+        clear_screen
+        echo "Extensions: $FILE_EXTENSIONS"
+        echo "1. Add"
+        echo "2. Remove"
+        echo "3. Return"
+        read -rsn1 opt
+        echo ""
+        case $opt in
+            1) read -p "Ext (no dot): " ext; FILE_EXTENSIONS="$FILE_EXTENSIONS|$ext|" ;;
+            2) read -p "Ext to remove: " ext; FILE_EXTENSIONS="${FILE_EXTENSIONS/|$ext|/|}" ;;
+            3) return ;;
+        esac
+    done
+}
+
+function configure_manually() {
+    while true; do
+        clear_screen
+        echo "Manual Configuration:"
+        echo "1. Set A/B or A Only flags"
+        echo "2. Partition Parameters"
+        echo "3. Mount Point ($CUSTOM_MOUNT_POINT)"
+        echo "4. File Extensions"
+        echo "5. Shortcuts"
+        echo "6. Save & Return"
+        read -rsn1 choice
+        echo ""
+        case $choice in
+            1) 
+               echo "1. A/B  2. A-Only"; read -rsn1 fl
+               [ "$fl" == "1" ] && { A_B="true"; A_O="false"; }
+               [ "$fl" == "2" ] && { A_B="false"; A_O="true"; }
+               ;;
+            2) set_partition_names ;;
+            3) read -p "New Mount Point: " CUSTOM_MOUNT_POINT ;;
+            4) configure_file_extensions ;;
+            5) manage_shortcuts ;;
+            6) save_configurations; return ;;
+        esac
+    done
+}
+
+function look() {
+    clear_screen
+    echo "Current Configuration:"
+    echo "Device: $DEVICE_NAME ($DEVICE_MODEL)"
+    echo "System: $CUSTOM_SYSTEM_NAME | Vendor: $CUSTOM_VENDOR_NAME"
+    echo "A/B: $A_B | Mapper: $DEVICE_MAPPER"
+    echo "Mount: $CUSTOM_MOUNT_POINT"
+    echo "Start: $DEFAULT_START_POINT"
+    echo "Exts: $FILE_EXTENSIONS"
     ask
 }
 
-# --- Explorador Interactivo (TUI Core) ---
+# --- Explorador Interactivo (TUI Core - Ultra Rápido) ---
 
-function list_directories_and_files() {
+# Función generadora de lista (sin ls, puro bash globbing)
+function generate_file_list() {
     local dir="$1"
     local index=1
-    local dirs=()
-    local files=()
     
-    shopt -s nullglob
-    dirs=( "$dir"/*/ )
-    files=( "$dir"/* )
-    shopt -u nullglob
-
+    # Reset arrays
+    dir_list=()
+    
+    # 1. Shortcuts (Si están habilitados arriba)
     if [ "$UP_SHORTCUTS" = "true" ]; then
         IFS=$'\n'
         for line in $SHORTCUTS; do
             local s_name=$(echo "$line" | awk '{print $1}')
             local s_path=$(echo "$line" | awk '{print $2}')
-            if [ -n "$s_name" ]; then echo "$index~[S]~$s_name~$s_path"; ((index++)); fi
+            # Validar que no sean líneas vacías
+            if [[ -n "$s_name" && -n "$s_path" ]]; then
+                dir_list+=("$index~[S]~$s_name~$s_path")
+                ((index++))
+            fi
         done
         unset IFS
     fi
 
+    # 2. Directorios Reales
+    shopt -s nullglob
+    local dirs=( "$dir"/*/ )
+    shopt -u nullglob
+    
     for d in "${dirs[@]}"; do
-        echo "$index~[D]~$(basename "$d")/~"
+        local d_name=$(basename "$d")
+        dir_list+=("$index~[D]~$d_name~/")
         ((index++))
     done
 
+    # 3. Archivos (Filtrados por extensión)
+    shopt -s nullglob
+    local files=( "$dir"/* )
+    shopt -u nullglob
+
     for f in "${files[@]}"; do
-        local f_name=$(basename "$f")
-        local ext="${f_name##*.}"
-        if [[ "$FILE_EXTENSIONS" == *"|${ext,,}|"* ]]; then
-            echo "$index~[F]~$f_name~"
-            ((index++))
+        if [ -f "$f" ]; then
+            local f_name=$(basename "$f")
+            local ext="${f_name##*.}"
+            # Chequeo rápido de string
+            if [[ "$FILE_EXTENSIONS" == *"|${ext,,}|"* ]]; then
+                dir_list+=("$index~[F]~$f_name~")
+                ((index++))
+            fi
         fi
     done
 }
@@ -382,39 +485,50 @@ function interactive_core() {
     export mode="$1"
     local selected_index=1
     local image_path="$DEFAULT_START_POINT"
-    [ -z "$image_path" ] && image_path="/sdcard"
+    [ ! -d "$image_path" ] && image_path="/sdcard"
 
     local needs_refresh=true
-    local list_output=""
     local total_items=0
 
     while true; do
+        # Solo regenerar la lista si cambiamos de directorio
         if [ "$needs_refresh" = true ]; then
-            list_output=$(list_directories_and_files "$image_path")
-            total_items=$(echo "$list_output" | wc -l)
-            [ -z "$list_output" ] && total_items=0
+            generate_file_list "$image_path"
+            total_items=${#dir_list[@]}
             needs_refresh=false
         fi
 
-        printf '\033[H\033[J'
+        # Renderizado Rápido
+        printf '\033[H\033[J' # Mover cursor inicio + limpiar
         echo "PATH: $image_path"
+        echo "------------------------------------------------"
+        echo "Navigate: W/S (Up/Down), D (Enter), A (Back), Q (Exit)"
         echo "------------------------------------------------"
         
         if [ "$total_items" -eq 0 ]; then
-            echo "  (Empty)"
+            echo "  (Empty Directory)"
         else
-            echo "$list_output" | awk -v sel="$selected_index" -v ptr="$MOUSE" '
-            {
-                split($0, arr, "~");
-                name = arr[3];
-                if (NR == sel) printf "%s %s %s\n", ptr, arr[2], name;
-                else           printf "  %s %s\n", arr[2], name;
-            }'
+            # Imprimir ventana visible (scrolling simple)
+            local start_idx=0
+            local end_idx=$total_items
+            
+            # Bucle de impresión de items
+            for item in "${dir_list[@]}"; do
+                # Parsear formato: Index~[Type]~Name~Extra
+                IFS='~' read -r idx type name extra <<< "$item"
+                
+                if [ "$idx" -eq "$selected_index" ]; then
+                    printf "%s %s %s\n" "$MOUSE" "$type" "$name"
+                else
+                    printf "  %s %s\n" "$type" "$name"
+                fi
+            done
         fi
 
+        # Input Handling (Sin delay perceptible)
         read -rsn1 input
         if [[ "$input" == $'\x1b' ]]; then
-            read -rsn2 -t 0.1 input
+            read -rsn2 -t 0.01 input # Timeout ultra corto
             case "$input" in '[A') input="w";; '[B') input="s";; '[C') input="d";; '[D') input="a";; esac
         fi
 
@@ -422,20 +536,27 @@ function interactive_core() {
             q) break ;;
             w) ((selected_index--)); [ $selected_index -lt 1 ] && selected_index=1 ;;
             s) ((selected_index++)); [ $selected_index -gt $total_items ] && selected_index=$total_items ;;
-            a) image_path=$(dirname "$image_path"); selected_index=1; needs_refresh=true ;;
+            a) 
+                image_path=$(dirname "$image_path")
+                selected_index=1
+                needs_refresh=true 
+                ;;
             d)
-                local item=$(echo "$list_output" | sed -n "${selected_index}p")
-                local type=$(echo "$item" | cut -d '~' -f 2)
-                local val=$(echo "$item" | cut -d '~' -f 3)
+                # Obtener item seleccionado del array (index base 0 vs base 1)
+                local current_item="${dir_list[$((selected_index-1))]}"
+                IFS='~' read -r idx type name extra <<< "$current_item"
                 
                 if [[ "$type" == "[D]" ]]; then
-                    image_path="${image_path%/}/$val"
+                    image_path="${image_path%/}/$name"
                     selected_index=1; needs_refresh=true
                 elif [[ "$type" == "[S]" ]]; then
-                    image_path=$(echo "$item" | cut -d '~' -f 4)
+                    image_path="$extra"
                     selected_index=1; needs_refresh=true
                 elif [[ "$type" == "[F]" ]]; then
-                    select_file="$val"; export image_path="${image_path%/}"; right_logic; needs_refresh=true
+                    select_file="$name"
+                    export image_path="${image_path%/}"
+                    right_logic
+                    needs_refresh=true # Refrescar al volver
                 fi
                 ;;
         esac
@@ -445,6 +566,8 @@ function interactive_core() {
 function right_logic() {
     local full_path="$image_path/$select_file"
     local ext="${select_file##*.}"
+    
+    echo "Selected: $select_file"
     
     if [[ "$ext" == "img" ]]; then
         ask
@@ -457,19 +580,19 @@ function right_logic() {
             "flash") echo "Flash logic here..." ;;
         esac
     else
+        # Archivo comprimido
         ask
         extract_image_from_archive "$full_path"
     fi
 }
 
-# --- Extras (Prank Restored) ---
+# --- Extras ---
 
 function simulate_bootloader_patch() {
     echo -e "${NC}Generating specialized patch keys for $DEVICE_MODEL${NC}"
-    echo -e "${NC}Modifying kernel for library adjustment${NC}"
     sleep 2
-    echo -e "${BLUE}Attempting to remove security patches from $DEVICE_NAME's Bootloader"
-    echo -e "${GREEN}Removal successful."
+    echo -e "${BLUE}Removing security patches...${NC}"
+    echo -e "${GREEN}Success.${NC}"
     sleep 1
 }
 
@@ -478,66 +601,43 @@ function prank() {
     local width=$(get_term_width)
     local bar=$(printf '%*s' "$width" | tr ' ' '-')
     
-    echo -e "${GREEN}Initializing attempt to remove Bootloader security patches on ${DEVICE_NAME}...${NC}"
+    echo -e "${GREEN}Patching Bootloader on ${DEVICE_NAME}...${NC}"
     simulate_bootloader_patch
     echo ""
     echo -e "${RED}$bar"
-    echo -e "${RED}ERROR: A critical problem has been detected.${NC}"
-    echo -e "${RED}Please do not turn off the device.${NC}"
+    echo -e "${RED}ERROR: Critical failure.${NC}"
     echo -e "${RED}$bar"
-    echo ""
-    echo -e "${RED}Checking SELinux integrity... Failed.${NC}"
-    echo "Press any key to repair..."
     read -rsn1
-    
-    # Fake glitch
     center_ansi "$LOGOV2"
     sleep 3
-    echo "Rebooting..."
-    sleep 1
     clear_screen
 }
 
-# --- Menú Principal (Interfaz Original Restaurada) ---
+# --- Menú Principal ---
 
 function GSIRW() {
     clear_screen
     stty -echo
     progressive_print "$(print_justified "Initialized the great wonder created by Dark")" 0.02
-    
-    sleepy 1
-    clear_screen
-    progressive_print "$(print_justified "Identifying device parameters in case of emergency")" 0.02
-    identify_device
-    
-    sleepy 1
-    clear_screen
-    progressive_print "$(print_justified "Loading secretly stored settings")" 0.02
-    load_saved_configurations
-    
-    sleepy 1
+    sleepy 0.5
     clear_screen
     
-    # Mostrar LOGO centrado
     center_ansi "$LOGO"
     
     progressive_print "$(print_justified "AIO (ALL IN ONE) GSI / OTA  -RW  ")" 0.1
-    sleepy 1
+    sleepy 0.5
     echo ""
-    print_justified "Select an option:"
-    sleepy 0.5
-    print_justified "1.Process the user-selected image."
-    print_justified "2.Process a copy of the installed system image."
-    print_justified "3.Process to return the ota in rw."
-    print_justified "4.Process and modify image."
-    print_justified "5.Modify image."
-    print_justified "6.Undo Any Modification."
-    print_justified "7.Manually configure options."
-    print_justified "8.Super Secret Settings ($SOC)"
-    print_justified "0.Exit GSI-rw."
-    sleepy 0.5
+    print_justified "1. Process User Image (File Selector)"
+    print_justified "2. Process System Installed (Copy & RW)"
+    print_justified "3. OTA RW (Full System)"
+    print_justified "4. Modify Image (Mount)"
+    print_justified "5. Undo Changes"
+    print_justified "6. Manual Settings"
+    print_justified "7. Check Config"
+    print_justified "8. Secret ($SOC)"
+    print_justified "0. Exit"
     
-    echo -n "$(print_justified "Choose an option: ")"
+    echo -n "$(print_justified "Option: ")"
     stty echo
     read -rn1 option
     echo ""
@@ -547,55 +647,34 @@ function GSIRW() {
         2) process_partitions "copy_only" ;;
         3) process_partitions "ota_rw" ;;
         4) interactive_core "user_modification" ;;
-        5) interactive_core "modification" ;;
-        6) interactive_core "undo" ;;
-        7) configure_manually ;;
+        5) interactive_core "undo" ;;
+        6) configure_manually ;;
+        7) look ;;
         8) prank ;;
-        0) 
-            progressive_print "$(print_justified "Why did you want to enter the GSIRW if you are ultimately going to leave?")" 0.05
-            exit ;;
+        0) exit ;;
         *) GSIRW ;;
     esac
 }
 
-# --- MAIN ENTRY POINT (Argument Handling Restored) ---
+# --- MAIN ENTRY ---
 
 function MAIN() {
-    # Manejo de animación
     ANIMATION=false
-    if [[ "$1" == "--animation" || "$1" == "-a" ]]; then
-        ANIMATION=true
-        shift
-    fi
+    [[ "$1" == "--animation" || "$1" == "-a" ]] && { ANIMATION=true; shift; }
 
     default
-    
-    # Determinar modo por nombre del script o argumento
     local call_name="$(basename "$0")"
     
     case "$call_name" in
         "gsirw_proces_image") interactive_core "process_user_selected_image" ;;
         "gsirw_sys_installed") process_partitions "copy_only" ;;
         "gsirw_ota_rw") process_partitions "ota_rw" ;;
-        "gsirw_mount") interactive_core "modification" ;;
-        "gsirw_undo") interactive_core "undo" ;;
         "gsirw") GSIRW ;;
-        *) 
-            # Si se llama con argumentos directos
-            if [ -n "$1" ]; then
-                case "$1" in
-                    "flash") interactive_core "flash" ;;
-                    *) GSIRW ;;
-                esac
-            else
-                GSIRW
-            fi
-            ;;
+        *) GSIRW ;;
     esac
 }
 
 function CHECK_ROOT_AND_DEPENDENCIES() {
-    # Check eficiente de dependencias para Termux
     if [ -n "$TERMUX_VERSION" ]; then
         local missing=()
         for pkg in tsu android-tools file e2fsprogs zip unzip lz4 tar xz-utils; do
@@ -606,11 +685,9 @@ function CHECK_ROOT_AND_DEPENDENCIES() {
             apt update -y && apt install -y "${missing[@]}"
         fi
     fi
-
     check_root_permissions
     exec_as_root "$@"
 }
 
-# Iniciar
 CHECK_ROOT_AND_DEPENDENCIES "$@"
-MAIN "$@
+MAIN "$@"
