@@ -4,28 +4,12 @@
 # - Syncs the relevant twrp minimal manifest, and patches it for building OrangeFox
 # - Pulls in the OrangeFox recovery sources and vendor tree
 # - Author:  DarthJabba9
-# - Version: generic:020
-# - Date:    02 July 2025
-#
-# 	* Changes for v007 (20220430)  - make it clear that fox_12.1 is not ready
-# 	* Changes for v008 (20220708)  - fox_12.1 is now ready
-# 	* Changes for v009 (20220708A) - try to cherry-pick the system vold stuff from gerrit
-# 	* Changes for v010 (20220708B) - move the cherry-pick call
-# 	* Changes for v011 (20220731)  - update the system vold patchset number to 10
-# 	* Changes for v012 (20220806)  - update the system vold patchset number to 12
-# 	* Changes for v013 (20220803)  - try to ensure that the submodules are updated
-# 	* Changes for v014 (20220908)  - don't apply the system vold patch: it is no longer needed
-# 	* Changes for v015 (20221206)  - remove support for manifests earlier than 11.0; only fox_11.0 and fox_12.1 are now officially supported
-# 	* Changes for v016 (20230531)  - dispense with the submodules stuff
-# 	* Changes for v017 (20250224)  - add fox_14.1 branch (this branch is *EXPERIMENTAL*)
-# 	* Changes for v018 (20250321)  - Enter R11.2; the 11.0 manifest is no longer supported
-# 	* Changes for v019 (20250514)  - Enter R11.3; add retry on 'git clone' failures
-# 	* Changes for v020 (20250702)  - patch system/vold/ for aidl weaver support
-#
+# - Modified for Shallow Clone (No Commits History)
+# - Version: generic:023-optimized
 # ***************************************************************************************
 
 # the version number of this script
-SCRIPT_VERSION="20250702";
+SCRIPT_VERSION="20251109-opt";
 
 # the base version of the current OrangeFox
 FOX_BASE_VERSION="R11.3";
@@ -47,7 +31,7 @@ do_fox_141() {
 	FOX_DEF_BRANCH="fox_14.1";
 	TWRP_BRANCH="twrp-14";
 	DEVICE_BRANCH="android-14";
-	test_build_device="vayu"; # the device whose tree we can clone for compiling a test build
+	test_build_device="vayu"; 
 	[ -z "$MANIFEST_DIR" ] && MANIFEST_DIR="$BASE_DIR/$FOX_DEF_BRANCH";
 }
 
@@ -57,7 +41,7 @@ do_fox_121() {
 	FOX_DEF_BRANCH="fox_12.1";
 	TWRP_BRANCH="twrp-12.1";
 	DEVICE_BRANCH="android-12.1";
-	test_build_device="miatoll"; # the device whose tree we can clone for compiling a test build
+	test_build_device="miatoll"; 
 	[ -z "$MANIFEST_DIR" ] && MANIFEST_DIR="$BASE_DIR/$FOX_DEF_BRANCH";
 }
 
@@ -164,9 +148,11 @@ update_environment() {
   # by default, don't use SSH for the "git clone" commands; to use SSH, you can also export USE_SSH=1 before starting
   [ -z "$USE_SSH" ] && USE_SSH="0";
 
-  # the "diff" file that will be used to patch the original manifest
+  # the "diff" file(s) that will be used to patch the original manifest
   PATCH_FILE="$BASE_DIR/patches/patch-manifest-$FOX_DEF_BRANCH.diff";
   PATCH_VOLD="$BASE_DIR/patches/patch-vold-$FOX_DEF_BRANCH.diff";
+  PATCH_REMOVE_MINIMAL="$BASE_DIR/patches/patch-remove-minimal-$FOX_DEF_BRANCH.diff";
+  PATCH_UPDATE_ENGINE="$BASE_DIR/patches/patch-update-engine-$FOX_DEF_BRANCH.diff";
 
   # the directory in which the patch of the manifest will be executed
   MANIFEST_BUILD_DIR="$MANIFEST_DIR/build";
@@ -174,6 +160,8 @@ update_environment() {
   # other possibly relevant patch directories
   MANIFEST_SYSTEM_DIR="$MANIFEST_DIR/system";
   MANIFEST_VOLD_DIR="$MANIFEST_SYSTEM_DIR/vold";
+  MANIFEST_UPDATE_ENGINE_DIR="$MANIFEST_SYSTEM_DIR/update_engine";
+  MANIFEST_REPO_MANIFESTS_DIR="$MANIFEST_DIR/.repo/manifests";
 }
 
 # init the script, ensure we have the patch file, and create the manifest directory
@@ -192,14 +180,15 @@ init_script() {
 get_twrp_minimal_manifest() {
   cd $MANIFEST_DIR;
   echo "-- Initialising the $TWRP_BRANCH minimal manifest repo ...";
-  repo init --depth=1 -u $MIN_MANIFEST -b $TWRP_BRANCH --no-tags;
+  repo init --depth=1 -u $MIN_MANIFEST -b $TWRP_BRANCH;
   [ "$?" != "0" ] && {
    abort "-- Failed to initialise the minimal manifest repo. Quitting.";
   }
   echo "-- Done.";
 
   echo "-- Syncing the $TWRP_BRANCH minimal manifest repo ...";
-  repo sync -c --no-clone-bundle --no-tags -j$(nproc --all);
+  # OPTIMIZED SYNC: No clone bundle, no tags, current branch only
+  repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags;
   [ "$?" != "0" ] && {
    abort "-- Failed to Sync the minimal manifest repo. Quitting.";
   }
@@ -213,16 +202,26 @@ patch_minimal_manifest() {
    patch -p1 < $PATCH_FILE;
    [ "$?" = "0" ] && echo "-- The $TWRP_BRANCH minimal manifest has been patched successfully" || abort "-- Failed to patch the $TWRP_BRANCH minimal manifest! Quitting.";
 
-   # --- 14.1 branch only ---
+   # --- 14.1 branch
    if [ "$BASE_VER" = "14" -o "$FOX_BRANCH" = "fox_14.1" ]; then
       echo "-- Patching the $TWRP_BRANCH system/vold for building OrangeFox for native $DEVICE_BRANCH devices ...";
       cd $MANIFEST_VOLD_DIR;
       patch -p1 < $PATCH_VOLD;
       [ "$?" = "0" ] && echo "-- The $TWRP_BRANCH system/vold has been patched successfully" || echo "-- Error! Failed to patch the $TWRP_BRANCH system/vold !";
+
+      echo "-- Patching the $TWRP_BRANCH .repo/manifests for building OrangeFox for native $DEVICE_BRANCH devices ...";
+      cd $MANIFEST_REPO_MANIFESTS_DIR;
+      patch -p1 < $PATCH_REMOVE_MINIMAL;
+      [ "$?" = "0" ] && echo "-- The $TWRP_BRANCH .repo/manifests has been patched successfully" || echo "-- Error! Failed to patch the $TWRP_BRANCH .repo/manifests !";
+   else
+      echo "-- Patching the $TWRP_BRANCH system/update_engine for building OrangeFox for native $DEVICE_BRANCH devices ...";
+      cd $MANIFEST_UPDATE_ENGINE_DIR;
+      patch -p1 < $PATCH_UPDATE_ENGINE;
+      [ "$?" = "0" ] && echo "-- The $TWRP_BRANCH system/update_engine has been patched successfully" || echo "-- Error! Failed to patch the $TWRP_BRANCH system/update_engine !";
    fi
-   # 14.1 branch only
 
    # save location of manifest dir
+   cd $MANIFEST_DIR/;
    echo "#" &> $SYNC_LOG;
    echo "MANIFEST_DIR=$MANIFEST_DIR" >> $SYNC_LOG;
    echo "#" >> $SYNC_LOG;
@@ -234,14 +233,36 @@ clone_common() {
 
    if [ ! -d "device/qcom/common" ]; then
    	echo "-- Cloning qcom common ...";
-	git clone https://github.com/TeamWin/android_device_qcom_common -b $DEVICE_BRANCH device/qcom/common;
+	git clone https://github.com/TeamWin/android_device_qcom_common -b $DEVICE_BRANCH device/qcom/common --depth=1;
 	[ "$?" = "0" ] && echo "-- Qcom common has been cloned successfully" || echo "-- Failed to clone Qcom common! You will need to clone it manually.";
    fi
 
    if [ ! -d "device/qcom/twrp-common" ]; then
    	echo "-- Cloning twrp-common ...";
-   	git clone https://github.com/TeamWin/android_device_qcom_twrp-common -b $DEVICE_BRANCH device/qcom/twrp-common;
+   	git clone https://github.com/TeamWin/android_device_qcom_twrp-common -b $DEVICE_BRANCH device/qcom/twrp-common --depth=1;
 	[ "$?" = "0" ] && echo "-- twrp-common has been cloned successfully" || echo "-- Failed to clone twrp-common! You will need to clone it manually.";
+   fi
+}
+
+# get se_omapi (14.1 only)
+clone_se_omapi() {
+local dest="external/se_omapi";
+local URL="";
+   if [ "$USE_SSH" = "0" ]; then
+      URL="https://gitlab.com/OrangeFox/external/se_omapi.git";
+   else
+      URL="git@gitlab.com:OrangeFox/external/se_omapi.git";
+   fi
+
+   if [ "$BASE_VER" = "14" -o "$FOX_BRANCH" = "fox_14.1" ]; then
+	cd $MANIFEST_DIR/;
+
+	# cleanup if we already have se_omapi there
+	[ -d "$dest" ] && rm -rf "$dest";
+
+	echo "-- Cloning se_omapi ...";
+	git clone $URL -b $FOX_BRANCH "$dest" --depth=1;
+	[ "$?" = "0" ] && echo "-- se_omapi has been cloned successfully" || echo "-- Error! Clone $URL manually to $dest";
    fi
 }
 
@@ -269,13 +290,13 @@ local BRANCH=$FOX_BRANCH;
    }
 
    echo "-- Pulling the OrangeFox recovery sources ...";
-   git clone $URL -b $BRANCH recovery;
+   git clone $URL -b $BRANCH recovery --depth=1;
    [ "$?" = "0" ] && echo "-- The OrangeFox sources have been cloned successfully" || {
    	echo "-- Pulling the OrangeFox recovery sources (2nd attempt) ...";
    	sleep 1;
    	rm -rf recovery;
    	sleep 1;
-   	git clone $URL -b $BRANCH recovery;
+   	git clone $URL -b $BRANCH recovery --depth=1;
    	[ "$?" = "0" ] && echo "-- The OrangeFox sources have been cloned successfully" || abort "-- Failed to clone the OrangeFox sources! You will need to clone them manually.";
    }
 
@@ -307,13 +328,13 @@ local BRANCH=$FOX_BRANCH;
 
    cd $MANIFEST_DIR/vendor;
    echo "-- Pulling the OrangeFox vendor tree ...";
-   git clone $URL -b $BRANCH recovery;
+   git clone $URL -b $BRANCH recovery --depth=1;
    [ "$?" = "0" ] && echo "-- The OrangeFox vendor tree has been cloned successfully" || {
    	echo "-- Pulling the OrangeFox vendor tree (2nd attempt) ...";
    	sleep 1;
    	rm -rf recovery;
    	sleep 1;
-   	git clone $URL -b $BRANCH recovery;
+   	git clone $URL -b $BRANCH recovery --depth=1;
    	[ "$?" = "0" ] && echo "-- The OrangeFox vendor tree has been cloned successfully" || abort "-- Failed to clone the OrangeFox vendor tree! You will need to clone it manually.";
    }
 }
@@ -331,7 +352,7 @@ local DIR=$MANIFEST_DIR/device/xiaomi;
    local URL=git@gitlab.com:OrangeFox/device/"$test_build_device".git;
    [ "$USE_SSH" = "0" ] && URL=https://gitlab.com/OrangeFox/device/"$test_build_device".git;
    echo "-- Pulling the $test_build_device device tree ...";
-   git clone $URL -b "$FOX_DEF_BRANCH" "$test_build_device";
+   git clone $URL -b "$FOX_DEF_BRANCH" "$test_build_device" --depth=1;
 
    # done
    if [ -d "$test_build_device" -a -d "$test_build_device/recovery" ]; then
@@ -394,6 +415,8 @@ WorkNow() {
     patch_minimal_manifest;
 
     clone_common;
+
+    clone_se_omapi;
 
     clone_fox_recovery;
 
