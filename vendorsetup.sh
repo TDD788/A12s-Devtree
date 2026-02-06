@@ -43,7 +43,6 @@ echo "Latest Magisk has been saved to: $FILE_NAME"
 export FOX_USE_SPECIFIC_MAGISK_ZIP="$FILE_NAME"
 
 # MKBOOTIMG
-chmod a+x device/samsung/a12s/prebuilt/mkboot/mkbootimg
 
 # Device variables
 FDEVICE1="a12s"
