@@ -101,6 +101,7 @@ jobs:
     - name: Build OrangeFox
       if: github.event.inputs.BUILD_RECOVERY == 'OFRP'
       run: |
+        set +e
         mkdir -p ~/OrangeFox
         cd ~/OrangeFox
         git clone https://gitlab.com/OrangeFox/sync.git -b master --depth=1
@@ -120,6 +121,7 @@ jobs:
     - name: Build TWRP/PBRP/SHRP
       if: github.event.inputs.BUILD_RECOVERY != 'OFRP'
       run: |
+        set +e
         mkdir workspace && cd workspace
         if [[ "${{ github.event.inputs.BUILD_RECOVERY }}" == "TWRP" ]]; then
           repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp -b twrp-${{ github.event.inputs.MANIFEST }}
